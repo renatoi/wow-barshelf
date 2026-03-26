@@ -533,321 +533,356 @@ local function GetAppearanceOptions()
 end
 
 ---------------------------------------------------------------------------
--- Shelves panel (custom frame, not AceConfig)
+-- Shelves panel: list on left, detail on right
 ---------------------------------------------------------------------------
+local selectedShelf = nil -- index into db.shelves
+
 local function BuildShelvesPanel(panel)
-    local PANEL_WIDTH = 580
+    local LIST_WIDTH = 170
+    local DETAIL_LEFT = LIST_WIDTH + 12
 
-    local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 4, -8)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -24, 8)
+    -- Left: shelf list (scrollable)
+    local listBorder = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    listBorder:SetPoint("TOPLEFT", 4, -8)
+    listBorder:SetPoint("BOTTOMLEFT", 4, 36)
+    listBorder:SetWidth(LIST_WIDTH)
+    listBorder:SetBackdrop({
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 10,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    listBorder:SetBackdropColor(0.05, 0.05, 0.05, 0.6)
+    listBorder:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
 
-    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetSize(PANEL_WIDTH, 1)
-    scrollFrame:SetScrollChild(scrollChild)
-    panel._scrollChild = scrollChild
-    panel._scrollFrame = scrollFrame
+    local listScroll = CreateFrame("ScrollFrame", nil, listBorder, "UIPanelScrollFrameTemplate")
+    listScroll:SetPoint("TOPLEFT", 4, -4)
+    listScroll:SetPoint("BOTTOMRIGHT", -22, 4)
+    local listChild = CreateFrame("Frame", nil, listScroll)
+    listChild:SetSize(LIST_WIDTH - 28, 1)
+    listScroll:SetScrollChild(listChild)
 
-    local function Refresh()
-        local parent = panel._scrollChild
-        if not parent then return end
+    -- Right: detail area (scrollable)
+    local detailScroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+    detailScroll:SetPoint("TOPLEFT", DETAIL_LEFT, -8)
+    detailScroll:SetPoint("BOTTOMRIGHT", -24, 36)
+    local detailChild = CreateFrame("Frame", nil, detailScroll)
+    detailChild:SetSize(400, 1)
+    detailScroll:SetScrollChild(detailChild)
 
-        for _, child in pairs({parent:GetChildren()}) do
-            child:Hide()
-            child:ClearAllPoints()
-            child:SetParent(nil)
-        end
-        for _, region in pairs({parent:GetRegions()}) do
-            region:Hide()
-        end
+    -- Bottom: add buttons
+    local addBarBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    addBarBtn:SetSize(130, 22)
+    addBarBtn:SetPoint("BOTTOMLEFT", 8, 8)
+    addBarBtn:SetText("+ Add Bar Shelf")
+
+    local addCustBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    addCustBtn:SetSize(140, 22)
+    addCustBtn:SetPoint("LEFT", addBarBtn, "RIGHT", 8, 0)
+    addCustBtn:SetText("+ Add Custom Shelf")
+
+    ---------------------------------------------------------------------------
+    local function RefreshList()
+        for _, c in pairs({listChild:GetChildren()}) do c:Hide(); c:ClearAllPoints(); c:SetParent(nil) end
+        for _, r in pairs({listChild:GetRegions()}) do r:Hide() end
 
         local db = Barshelf.db.profile
-        local y = -4
+        local y = 0
 
         if #db.shelves == 0 then
-            local hint = parent:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-            hint:SetPoint("TOPLEFT", 16, y)
-            hint:SetText("No shelves yet. Add one below.")
-            y = y - 20
+            local hint = listChild:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            hint:SetPoint("TOPLEFT", 4, -4)
+            hint:SetText("No shelves yet.")
+            y = -20
         end
 
-        for si, shelfCfg in ipairs(db.shelves) do
-            local ROW_LEFT = 8
+        for si, cfg in ipairs(db.shelves) do
+            local row = CreateFrame("Button", nil, listChild)
+            row:SetSize(LIST_WIDTH - 28, 22)
+            row:SetPoint("TOPLEFT", 0, y)
 
-            -- Header row
-            local hdr = CreateFrame("Frame", nil, parent)
-            hdr:SetSize(PANEL_WIDTH - 20, 26)
-            hdr:SetPoint("TOPLEFT", ROW_LEFT, y)
-
-            local bg = hdr:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints()
-            bg:SetColorTexture(0.15, 0.15, 0.15, 0.5)
-
-            -- Expand toggle
-            local expand = CreateFrame("Button", nil, hdr)
-            expand:SetSize(20, 20)
-            expand:SetPoint("LEFT", 2, 0)
-            local expandText = expand:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            expandText:SetPoint("CENTER")
-            expandText:SetText(expandedState[si] and "v" or ">")
-
-            -- Type badge
-            local typeLabel = hdr:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            typeLabel:SetPoint("LEFT", expand, "RIGHT", 4, 0)
-            if shelfCfg.type == "bar" then
-                typeLabel:SetText("|cff88ccff[Bar " .. (shelfCfg.barID or "?") .. "]|r")
+            -- Selected highlight
+            local sel = row:CreateTexture(nil, "BACKGROUND")
+            sel:SetAllPoints()
+            if si == selectedShelf then
+                sel:SetColorTexture(0.2, 0.4, 0.6, 0.6)
             else
-                typeLabel:SetText("|cffcccc88[Custom]|r")
+                sel:SetColorTexture(0, 0, 0, 0)
             end
+
+            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
             -- Label
-            local label = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            label:SetPoint("LEFT", typeLabel, "RIGHT", 6, 0)
-            label:SetText(shelfCfg.label or "Unnamed")
+            local badge = (cfg.type == "bar")
+                and "|cff88ccff[B" .. (cfg.barID or "?") .. "]|r "
+                or "|cffcccc88[C]|r "
+            local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            lbl:SetPoint("LEFT", 4, 0)
+            lbl:SetPoint("RIGHT", -4, 0)
+            lbl:SetJustifyH("LEFT")
+            lbl:SetText(badge .. (cfg.label or "Unnamed"))
+            if not cfg.enabled then lbl:SetAlpha(0.5) end
 
-            -- Enable toggle
-            local enable = CreateFrame("CheckButton", nil, hdr, "UICheckButtonTemplate")
-            enable:SetPoint("RIGHT", hdr, "RIGHT", -26, 0)
-            enable:SetSize(22, 22)
-            enable:SetChecked(shelfCfg.enabled)
-            enable:SetScript("OnClick", function(frame)
-                shelfCfg.enabled = frame:GetChecked()
+            row:SetScript("OnClick", function()
+                selectedShelf = si
+                panel._refresh()
+            end)
+
+            y = y - 23
+        end
+
+        listChild:SetHeight(math.abs(y) + 4)
+    end
+
+    ---------------------------------------------------------------------------
+    local function RefreshDetail()
+        for _, c in pairs({detailChild:GetChildren()}) do c:Hide(); c:ClearAllPoints(); c:SetParent(nil) end
+        for _, r in pairs({detailChild:GetRegions()}) do r:Hide() end
+
+        local db = Barshelf.db.profile
+        local cfg = db.shelves[selectedShelf]
+        if not cfg then
+            local hint = detailChild:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+            hint:SetPoint("TOPLEFT", 8, -8)
+            hint:SetText("Select a shelf on the left to configure it.")
+            detailChild:SetHeight(30)
+            return
+        end
+
+        local si = selectedShelf
+        local y = -4
+        local indent = 4
+
+        -- Title row: type + label + enabled + move + delete
+        local titleRow = CreateFrame("Frame", nil, detailChild)
+        titleRow:SetSize(390, 24)
+        titleRow:SetPoint("TOPLEFT", indent, y)
+
+        local titleText = titleRow:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        titleText:SetPoint("LEFT")
+        titleText:SetText(cfg.label or "Unnamed")
+
+        -- Enabled
+        local enable = CreateFrame("CheckButton", nil, titleRow, "UICheckButtonTemplate")
+        enable:SetPoint("RIGHT", titleRow, "RIGHT", 0, 0)
+        enable:SetSize(22, 22)
+        enable:SetChecked(cfg.enabled)
+        local enText = enable.Text or enable.text
+        if enText then enText:SetText("Enabled") end
+        enable:SetScript("OnClick", function(f)
+            cfg.enabled = f:GetChecked()
+            Barshelf:RebuildAll()
+            RefreshList()
+        end)
+
+        -- Delete
+        local del = CreateFrame("Button", nil, titleRow, "UIPanelButtonTemplate")
+        del:SetSize(60, 20)
+        del:SetPoint("RIGHT", enable, "LEFT", -6, 0)
+        del:SetText("Delete")
+        del:SetScript("OnClick", function()
+            selectedShelf = nil
+            Barshelf:RemoveShelf(si)
+            panel._refresh()
+        end)
+
+        -- Move up / down
+        local moveDown = CreateFrame("Button", nil, titleRow, "UIPanelButtonTemplate")
+        moveDown:SetSize(22, 20)
+        moveDown:SetPoint("RIGHT", del, "LEFT", -4, 0)
+        moveDown:SetNormalFontObject("GameFontNormalSmall")
+        moveDown:SetText("v")
+        if si < #db.shelves then
+            moveDown:SetScript("OnClick", function()
+                db.shelves[si], db.shelves[si + 1] = db.shelves[si + 1], db.shelves[si]
+                selectedShelf = si + 1
                 Barshelf:RebuildAll()
+                panel._refresh()
             end)
+        else moveDown:Disable() end
 
-            -- Delete
-            local del = CreateFrame("Button", nil, hdr, "UIPanelButtonTemplate")
-            del:SetSize(22, 20)
-            del:SetPoint("RIGHT", enable, "LEFT", -2, 0)
-            del:SetText("X")
-            del:SetScript("OnClick", function()
-                expandedState[si] = nil
-                layoutExpandedState[si] = nil
-                Barshelf:RemoveShelf(si)
-                Refresh()
+        local moveUp = CreateFrame("Button", nil, titleRow, "UIPanelButtonTemplate")
+        moveUp:SetSize(22, 20)
+        moveUp:SetPoint("RIGHT", moveDown, "LEFT", -1, 0)
+        moveUp:SetNormalFontObject("GameFontNormalSmall")
+        moveUp:SetText("^")
+        if si > 1 then
+            moveUp:SetScript("OnClick", function()
+                db.shelves[si], db.shelves[si - 1] = db.shelves[si - 1], db.shelves[si]
+                selectedShelf = si - 1
+                Barshelf:RebuildAll()
+                panel._refresh()
             end)
+        else moveUp:Disable() end
 
-            -- Move down
-            local moveDown = CreateFrame("Button", nil, hdr, "UIPanelButtonTemplate")
-            moveDown:SetSize(22, 20)
-            moveDown:SetPoint("RIGHT", del, "LEFT", -2, 0)
-            moveDown:SetNormalFontObject("GameFontNormalSmall")
-            moveDown:SetText("v")
-            if si < #db.shelves then
-                moveDown:SetScript("OnClick", function()
-                    local shelves = db.shelves
-                    shelves[si], shelves[si + 1] = shelves[si + 1], shelves[si]
-                    expandedState[si], expandedState[si + 1] = expandedState[si + 1], expandedState[si]
-                    layoutExpandedState[si], layoutExpandedState[si + 1] = layoutExpandedState[si + 1], layoutExpandedState[si]
+        y = y - 30
+
+        -- Label
+        _, y = CreateEditBox(detailChild, indent, y, "Label", cfg.label, 200, function(v)
+            cfg.label = v
+            DebouncedRebuild()
+            RefreshList()
+        end)
+
+        -- Action Bar (bar type only)
+        if cfg.type == "bar" then
+            local barOpts = {}
+            for id = 1, 8 do
+                barOpts[#barOpts + 1] = { text = Barshelf.BAR_INFO[id].label, value = id }
+            end
+            _, y = CreateDropdownButton(detailChild, indent, y, "Action Bar",
+                barOpts,
+                Barshelf.BAR_INFO[cfg.barID] and Barshelf.BAR_INFO[cfg.barID].label or "?",
+                function(v)
+                    for oi, oc in ipairs(db.shelves) do
+                        if oi ~= si and oc.type == "bar" and oc.barID == v and oc.enabled then
+                            Barshelf:Print("Bar " .. v .. " is already used.")
+                            return
+                        end
+                    end
+                    cfg.barID = v
+                    cfg.label = Barshelf.BAR_INFO[v].label
                     Barshelf:RebuildAll()
-                    Refresh()
+                    panel._refresh()
                 end)
-            else
-                moveDown:Disable()
+        end
+
+        -- Open Direction
+        local anchorNames = { AUTO = "Auto", BOTTOM = "Below", TOP = "Above", LEFT = "Left", RIGHT = "Right" }
+        _, y = CreateDropdownButton(detailChild, indent, y, "Open Direction",
+            {
+                { text = "Auto",  value = "AUTO" },
+                { text = "Below", value = "BOTTOM" },
+                { text = "Above", value = "TOP" },
+                { text = "Left",  value = "LEFT" },
+                { text = "Right", value = "RIGHT" },
+            },
+            anchorNames[cfg.popupAnchor] or "Auto",
+            function(v) cfg.popupAnchor = v; DebouncedRebuild() end)
+
+        -- Button Style
+        local modeNames = { both = "Icon + Label", label = "Label only", icon = "Icon only" }
+        _, y = CreateDropdownButton(detailChild, indent, y, "Handle Style",
+            {
+                { text = "Icon + Label", value = "both" },
+                { text = "Label only",   value = "label" },
+                { text = "Icon only",    value = "icon" },
+            },
+            modeNames[cfg.displayMode] or "Icon + Label",
+            function(v) cfg.displayMode = v; DebouncedRebuild() end)
+
+        -- Row Order (bar type only)
+        if cfg.type == "bar" then
+            local curVal = cfg.rowOrder
+            local curLabel = curVal == "auto" and "Auto (Blizzard)"
+                or curVal == "topdown" and "Top to Bottom"
+                or curVal == "bottomup" and "Bottom to Top"
+                or "Use Global"
+            _, y = CreateDropdownButton(detailChild, indent, y, "Row Order",
+                {
+                    { text = "Use Global", value = nil },
+                    { text = "Auto (Blizzard)", value = "auto" },
+                    { text = "Top to Bottom",   value = "topdown" },
+                    { text = "Bottom to Top",   value = "bottomup" },
+                },
+                curLabel,
+                function(v) cfg.rowOrder = v; DebouncedRebuild() end)
+        end
+
+        -- Dock (only if >1)
+        if #db.docks > 1 then
+            local dockOpts = {}
+            for _, dc in ipairs(db.docks) do
+                dockOpts[#dockOpts + 1] = { text = dc.name, value = dc.id }
             end
-
-            -- Move up
-            local moveUp = CreateFrame("Button", nil, hdr, "UIPanelButtonTemplate")
-            moveUp:SetSize(22, 20)
-            moveUp:SetPoint("RIGHT", moveDown, "LEFT", -1, 0)
-            moveUp:SetNormalFontObject("GameFontNormalSmall")
-            moveUp:SetText("^")
-            if si > 1 then
-                moveUp:SetScript("OnClick", function()
-                    local shelves = db.shelves
-                    shelves[si], shelves[si - 1] = shelves[si - 1], shelves[si]
-                    expandedState[si], expandedState[si - 1] = expandedState[si - 1], expandedState[si]
-                    layoutExpandedState[si], layoutExpandedState[si - 1] = layoutExpandedState[si - 1], layoutExpandedState[si]
-                    Barshelf:RebuildAll()
-                    Refresh()
-                end)
-            else
-                moveUp:Disable()
+            local curDockName = "Main"
+            for _, dc in ipairs(db.docks) do
+                if dc.id == cfg.dockID then curDockName = dc.name; break end
             end
-
-            y = y - 28
-
-            expand:SetScript("OnClick", function()
-                expandedState[si] = not expandedState[si]
-                Refresh()
-            end)
-
-            -- Expanded settings
-            if expandedState[si] then
-                local indent = ROW_LEFT + 20
-
-                -- Label edit
-                _, y = CreateEditBox(parent, indent, y, "Label", shelfCfg.label, 180, function(v)
-                    shelfCfg.label = v
-                    DebouncedRebuild()
-                end)
-
-                -- Action Bar (bar shelves only)
-                if shelfCfg.type == "bar" then
-                    local barOpts = {}
-                    for id = 1, 8 do
-                        local info = Barshelf.BAR_INFO[id]
-                        barOpts[#barOpts + 1] = { text = info.label, value = id }
-                    end
-                    _, y = CreateDropdownButton(parent, indent, y, "Action Bar",
-                        barOpts,
-                        Barshelf.BAR_INFO[shelfCfg.barID] and Barshelf.BAR_INFO[shelfCfg.barID].label or "?",
-                        function(v)
-                            for oi, oc in ipairs(db.shelves) do
-                                if oi ~= si and oc.type == "bar" and oc.barID == v and oc.enabled then
-                                    Barshelf:Print("Bar " .. v .. " is already used.")
-                                    return
-                                end
-                            end
-                            shelfCfg.barID = v
-                            shelfCfg.label = Barshelf.BAR_INFO[v].label
-                            Barshelf:RebuildAll()
-                            Refresh()
-                        end)
-                end
-
-                -- Open Direction
-                local anchorOpts = {
-                    { text = "Auto",  value = "AUTO" },
-                    { text = "Below", value = "BOTTOM" },
-                    { text = "Above", value = "TOP" },
-                    { text = "Left",  value = "LEFT" },
-                    { text = "Right", value = "RIGHT" },
-                }
-                local anchorNames = { AUTO = "Auto", BOTTOM = "Below", TOP = "Above", LEFT = "Left", RIGHT = "Right" }
-                _, y = CreateDropdownButton(parent, indent, y, "Open Direction",
-                    anchorOpts, anchorNames[shelfCfg.popupAnchor] or "Auto",
-                    function(v) shelfCfg.popupAnchor = v; DebouncedRebuild() end)
-
-                -- Row Order (bar shelves only, per-shelf override)
-                if shelfCfg.type == "bar" then
-                    local shelfRowOpts = {
-                        { text = "Use Global", value = nil },
-                        { text = "Auto (Blizzard)", value = "auto" },
-                        { text = "Top to Bottom",   value = "topdown" },
-                        { text = "Bottom to Top",   value = "bottomup" },
-                    }
-                    local curVal = shelfCfg.rowOrder
-                    local curLabel = curVal == "auto" and "Auto (Blizzard)"
-                        or curVal == "topdown" and "Top to Bottom"
-                        or curVal == "bottomup" and "Bottom to Top"
-                        or "Use Global"
-                    _, y = CreateDropdownButton(parent, indent, y, "Row Order",
-                        shelfRowOpts, curLabel,
-                        function(v) shelfCfg.rowOrder = v; DebouncedRebuild() end)
-                end
-
-                -- Button Style
-                local modeOpts = {
-                    { text = "Icon + Label", value = "both" },
-                    { text = "Label only",   value = "label" },
-                    { text = "Icon only",    value = "icon" },
-                }
-                local modeNames = { both = "Icon + Label", label = "Label only", icon = "Icon only" }
-                _, y = CreateDropdownButton(parent, indent, y, "Button Style",
-                    modeOpts, modeNames[shelfCfg.displayMode] or "Icon + Label",
-                    function(v) shelfCfg.displayMode = v; DebouncedRebuild() end)
-
-                -- Dock assignment (only when multiple docks exist)
-                if #db.docks > 1 then
-                    local dockOpts = {}
-                    for _, dc in ipairs(db.docks) do
-                        dockOpts[#dockOpts + 1] = { text = dc.name, value = dc.id }
-                    end
-                    local curDockName = "Main"
-                    for _, dc in ipairs(db.docks) do
-                        if dc.id == shelfCfg.dockID then curDockName = dc.name; break end
-                    end
-                    _, y = CreateDropdownButton(parent, indent, y, "Dock",
-                        dockOpts, curDockName,
-                        function(v) shelfCfg.dockID = v; DebouncedRebuild() end)
-                end
-
-                -- Layout & Sizing sub-toggle
-                y = y - 4
-                local layoutToggle = CreateFrame("Button", nil, parent)
-                layoutToggle:SetSize(200, 18)
-                layoutToggle:SetPoint("TOPLEFT", indent, y)
-                local layoutText = layoutToggle:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                layoutText:SetPoint("LEFT")
-                layoutText:SetText((layoutExpandedState[si] and "v" or ">") .. " Layout & Sizing")
-                layoutToggle:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
-                layoutToggle:SetScript("OnClick", function()
-                    layoutExpandedState[si] = not layoutExpandedState[si]
-                    Refresh()
-                end)
-                y = y - 22
-
-                if layoutExpandedState[si] then
-                    local layoutIndent = indent + 16
-                    local isBar = shelfCfg.type == "bar"
-
-                    _, y = CreateSlider(parent, layoutIndent, y, "# of Icons",
-                        1, isBar and 12 or 24, 1, shelfCfg.numButtons or 12,
-                        function(v) shelfCfg.numButtons = v; DebouncedRebuild() end)
-
-                    _, y = CreateSlider(parent, layoutIndent, y, "# of Rows",
-                        1, isBar and 12 or 24, 1, shelfCfg.numRows or 1,
-                        function(v) shelfCfg.numRows = v; DebouncedRebuild() end)
-
-                    _, y = CreateSlider(parent, layoutIndent, y, "Icon Padding",
-                        0, 12, 1, shelfCfg.buttonPadding or 2,
-                        function(v) shelfCfg.buttonPadding = v; DebouncedRebuild() end)
-
-                    _, y = CreateSlider(parent, layoutIndent, y, "Icon Size",
-                        20, 56, 2, shelfCfg.buttonSize or 36,
-                        function(v) shelfCfg.buttonSize = v; DebouncedRebuild() end)
-
-                    _, y = CreateSlider(parent, layoutIndent, y, "Handle Icon Size",
-                        10, 32, 1, shelfCfg.iconSize or 16,
-                        function(v) shelfCfg.iconSize = v; DebouncedRebuild() end)
-
-                    _, y = CreateSlider(parent, layoutIndent, y, "Handle Font Size",
-                        8, 18, 1, shelfCfg.labelFontSize or 12,
-                        function(v) shelfCfg.labelFontSize = v; DebouncedRebuild() end)
-                end
-
-                y = y - 4
-            end
+            _, y = CreateDropdownButton(detailChild, indent, y, "Dock",
+                dockOpts, curDockName,
+                function(v) cfg.dockID = v; DebouncedRebuild() end)
         end
 
         y = y - 6
 
-        -- Add shelf buttons
-        local addBarBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-        addBarBtn:SetSize(130, 22)
-        addBarBtn:SetPoint("TOPLEFT", 12, y)
-        addBarBtn:SetText("+ Add Bar Shelf")
-        addBarBtn:SetScript("OnClick", function()
-            local used = {}
-            for _, cfg in ipairs(db.shelves) do
-                if cfg.type == "bar" and cfg.enabled then used[cfg.barID] = true end
-            end
-            local barID
-            for id = 1, 8 do
-                if not used[id] then barID = id; break end
-            end
-            if not barID then
-                Barshelf:Print("All bars (1-8) are already assigned.")
-                return
-            end
-            Barshelf:AddBarShelf(barID)
-            Refresh()
-        end)
+        -- Layout & Sizing section header
+        local layoutHdr = detailChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        layoutHdr:SetPoint("TOPLEFT", indent, y)
+        layoutHdr:SetText("|cffffffffLayout & Sizing|r")
+        y = y - 18
 
-        local addCustBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-        addCustBtn:SetSize(140, 22)
-        addCustBtn:SetPoint("LEFT", addBarBtn, "RIGHT", 8, 0)
-        addCustBtn:SetText("+ Add Custom Shelf")
-        addCustBtn:SetScript("OnClick", function()
-            Barshelf:AddCustomShelf("Custom")
-            Refresh()
-        end)
+        local isBar = cfg.type == "bar"
 
-        y = y - 30
+        _, y = CreateSlider(detailChild, indent, y, "# of Icons",
+            1, isBar and 12 or 24, 1, cfg.numButtons or 12,
+            function(v) cfg.numButtons = v; DebouncedRebuild() end)
 
-        parent:SetHeight(math.abs(y) + 20)
+        _, y = CreateSlider(detailChild, indent, y, "# of Rows",
+            1, isBar and 12 or 24, 1, cfg.numRows or 1,
+            function(v) cfg.numRows = v; DebouncedRebuild() end)
+
+        _, y = CreateSlider(detailChild, indent, y, "Icon Size",
+            20, 56, 2, cfg.buttonSize or 36,
+            function(v) cfg.buttonSize = v; DebouncedRebuild() end)
+
+        _, y = CreateSlider(detailChild, indent, y, "Icon Padding",
+            0, 12, 1, cfg.buttonPadding or 2,
+            function(v) cfg.buttonPadding = v; DebouncedRebuild() end)
+
+        y = y - 6
+
+        local handleHdr = detailChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        handleHdr:SetPoint("TOPLEFT", indent, y)
+        handleHdr:SetText("|cffffffffHandle (per-shelf)|r")
+        y = y - 18
+
+        _, y = CreateSlider(detailChild, indent, y, "Handle Icon Size",
+            10, 32, 1, cfg.iconSize or 16,
+            function(v) cfg.iconSize = v; DebouncedRebuild() end)
+
+        _, y = CreateSlider(detailChild, indent, y, "Handle Font Size",
+            8, 18, 1, cfg.labelFontSize or 12,
+            function(v) cfg.labelFontSize = v; DebouncedRebuild() end)
+
+        detailChild:SetHeight(math.abs(y) + 20)
     end
+
+    ---------------------------------------------------------------------------
+    local function Refresh()
+        local db = Barshelf.db.profile
+        -- Clamp selection
+        if selectedShelf and (selectedShelf < 1 or selectedShelf > #db.shelves) then
+            selectedShelf = nil
+        end
+        RefreshList()
+        RefreshDetail()
+    end
+
+    addBarBtn:SetScript("OnClick", function()
+        local db = Barshelf.db.profile
+        local used = {}
+        for _, cfg in ipairs(db.shelves) do
+            if cfg.type == "bar" and cfg.enabled then used[cfg.barID] = true end
+        end
+        local barID
+        for id = 1, 8 do
+            if not used[id] then barID = id; break end
+        end
+        if not barID then
+            Barshelf:Print("All bars (1-8) are already assigned.")
+            return
+        end
+        Barshelf:AddBarShelf(barID)
+        selectedShelf = #db.shelves
+        Refresh()
+    end)
+
+    addCustBtn:SetScript("OnClick", function()
+        Barshelf:AddCustomShelf("Custom")
+        selectedShelf = #Barshelf.db.profile.shelves
+        Refresh()
+    end)
 
     panel._refresh = Refresh
     panel:SetScript("OnShow", function() Refresh() end)
@@ -1023,8 +1058,14 @@ end
 ---------------------------------------------------------------------------
 local pendingOpen = false
 
-function Barshelf:openOptions(subcategoryName)
+function Barshelf:openOptions(subcategoryName, shelfIndex)
     if not parentCategory then return end
+
+    -- Pre-select a shelf if requested
+    if shelfIndex then
+        selectedShelf = shelfIndex
+        subcategoryName = subcategoryName or "Shelves"
+    end
 
     local targetID
     if subcategoryName and subcategories[subcategoryName] then

@@ -36,16 +36,10 @@ function Barshelf:ActivateBarShelf(shelf)
 
     wipe(shelf.buttons)
 
-    -- Count how many buttons Blizzard is actually showing (respects Edit Mode
-    -- "# of Icons" setting). Only reparent visible buttons.
-    local blizzardCount = 0
-    for i = 1, info.count do
-        local button = _G[info.prefix .. i]
-        if button and button:IsShown() then
-            blizzardCount = blizzardCount + 1
-        end
-    end
-    local num = math.min(shelf.config.numButtons or info.count, blizzardCount)
+    -- Use config.numButtons directly (set by AddBarShelf from Edit Mode state).
+    -- Don't re-check IsShown() here — during early load (OnEnable), Blizzard's
+    -- bars may not be shown yet, which would give blizzardCount=0.
+    local num = shelf.config.numButtons or info.count
 
     for i = 1, num do
         local button = _G[info.prefix .. i]
@@ -208,12 +202,11 @@ function Barshelf:DeactivateBarShelf(shelf)
         return
     end
 
-    -- Restore the original Blizzard bar frame
+    -- Restore the original Blizzard bar frame (always show it —
+    -- if the shelf is being removed, the user wants the bar back)
     if shelf.hiddenBarFrame then
         UnregisterStateDriver(shelf.hiddenBarFrame, "visibility")
-        if shelf.barFrameWasShown then
-            shelf.hiddenBarFrame:Show()
-        end
+        shelf.hiddenBarFrame:Show()
         shelf.hiddenBarFrame = nil
         shelf.barFrameWasShown = nil
     end

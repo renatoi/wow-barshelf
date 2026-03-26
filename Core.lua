@@ -377,9 +377,26 @@ function Barshelf:OnInitialize()
     self:MigrateOldDB()
     self.db = LibStub("AceDB-3.0"):New("BarshelfDB", defaults, true)
 
-    self.db.RegisterCallback(self, "OnProfileChanged", "RebuildAll")
-    self.db.RegisterCallback(self, "OnProfileCopied", "RebuildAll")
-    self.db.RegisterCallback(self, "OnProfileReset", "RebuildAll")
+    -- Ensure critical tables exist (profile copy/reset may not create them)
+    local p = self.db.profile
+    if not p.docks or #p.docks == 0 then
+        p.docks = { { id = 1, name = "Main", point = nil, orientation = "HORIZONTAL" } }
+    end
+    if not p.shelves then p.shelves = {} end
+    if not p.minimap then p.minimap = { hide = false } end
+
+    local function onProfileChanged()
+        local pr = self.db.profile
+        if not pr.docks or #pr.docks == 0 then
+            pr.docks = { { id = 1, name = "Main", point = nil, orientation = "HORIZONTAL" } }
+        end
+        if not pr.shelves then pr.shelves = {} end
+        if not pr.minimap then pr.minimap = { hide = false } end
+        self:RebuildAll()
+    end
+    self.db.RegisterCallback(self, "OnProfileChanged", onProfileChanged)
+    self.db.RegisterCallback(self, "OnProfileCopied", onProfileChanged)
+    self.db.RegisterCallback(self, "OnProfileReset", onProfileChanged)
 
     self:RegisterChatCommand("barshelf", "ChatCommand")
     self:RegisterChatCommand("bs", "ChatCommand")
@@ -387,6 +404,8 @@ function Barshelf:OnInitialize()
     if self.SetupOptions then
         self:SetupOptions()
     end
+
+    self:Print("Loaded. Type /bs to open settings.")
 end
 
 function Barshelf:OnEnable()
@@ -406,6 +425,16 @@ function Barshelf:OnEnable()
 
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
     self:RegisterEvent("PLAYER_REGEN_ENABLED")
+
+    -- Show original bars in Edit Mode so users can configure Blizzard's settings
+    if EditModeManagerFrame then
+        EditModeManagerFrame:HookScript("OnShow", function()
+            Barshelf:OnEditModeEnter()
+        end)
+        EditModeManagerFrame:HookScript("OnHide", function()
+            Barshelf:OnEditModeExit()
+        end)
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -418,6 +447,28 @@ end
 function Barshelf:PLAYER_REGEN_ENABLED()
     self.inCombat = false
     self:ProcessCombatQueue()
+end
+
+function Barshelf:OnEditModeEnter()
+    -- Temporarily restore original Blizzard bars so Edit Mode can configure them
+    for _, shelf in ipairs(self.shelves) do
+        if shelf.type == "bar" and shelf.hiddenBarFrame then
+            UnregisterStateDriver(shelf.hiddenBarFrame, "visibility")
+            shelf.hiddenBarFrame:Show()
+        end
+    end
+end
+
+function Barshelf:OnEditModeExit()
+    -- Re-hide Blizzard bars that our shelves replace
+    for _, shelf in ipairs(self.shelves) do
+        if shelf.type == "bar" and shelf.hiddenBarFrame then
+            shelf.hiddenBarFrame:Hide()
+            RegisterStateDriver(shelf.hiddenBarFrame, "visibility", "hide")
+        end
+    end
+    -- Rebuild to pick up any Edit Mode changes (icon count, size, etc.)
+    self:RebuildAll()
 end
 
 ---------------------------------------------------------------------------

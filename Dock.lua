@@ -97,10 +97,10 @@ function DockMixin:CreateHandle(shelf)
     handle:SetAttribute("_onclick", HANDLE_CLICK_SNIPPET)
     handle:RegisterForClicks("AnyUp")
 
-    -- Right-click opens settings (insecure, fine out of combat)
+    -- Right-click opens settings for this shelf
     handle:HookScript("OnClick", function(_, mouseButton)
         if mouseButton == "RightButton" and not InCombatLockdown() then
-            Barshelf:ToggleConfig()
+            Barshelf:openOptions("Shelves", shelf.index)
         end
     end)
 

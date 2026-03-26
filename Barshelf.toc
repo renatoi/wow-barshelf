@@ -3,7 +3,7 @@
 ## Notes: Access your hidden action bars through floating popup shelves
 ## Version: 1.0.0
 ## Author: Barshelf Contributors
-## SavedVariables: BarshelfDB
+## SavedVariablesPerCharacter: BarshelfDB
 ## IconTexture: Interface\Icons\INV_Misc_Bag_07
 
 embeds.xml
