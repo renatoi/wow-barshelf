@@ -1,0 +1,44 @@
+name: Release and Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract changelog for current tag
+        id: changelog
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Extract the section for this tag from CHANGELOG.md
+          BODY=$(awk "/^## ${TAG}$/,/^## /{if(/^## ${TAG}$/)next; if(/^## /)exit; print}" CHANGELOG.md)
+          # Fall back to full tag section if awk missed it (handles EOF)
+          if [ -z "$BODY" ]; then
+            BODY=$(awk "/^## ${TAG}$/,0{if(/^## ${TAG}$/)next; print}" CHANGELOG.md)
+          fi
+          # Write to file for the release step
+          echo "$BODY" > release_notes.md
+
+      - name: Package and Publish
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update GitHub release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ -s release_notes.md ]; then
+            gh release edit "$TAG" --notes-file release_notes.md
+          fi

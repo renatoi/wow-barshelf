@@ -1,0 +1,23 @@
+package-as: Barshelf
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - .github
+  - tools
+  - docs
+  - build.py
+  - "*.zip"
+  - __pycache__
+  - .gitignore
+  - .luacheckrc
+  - .luacheckrc_wow
+  - stylua.toml
+  - .styluaignore
+  - Makefile
+  - README.md
+  - LICENSE
+  - SPEC.md
+  - assets

@@ -1,0 +1,28 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install luacheck
+        run: sudo apt-get install -y lua-check || sudo luarocks install luacheck
+
+      - name: Install StyLua
+        run: |
+          curl -fsSL https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip -o stylua.zip
+          unzip stylua.zip
+          chmod +x stylua
+          sudo mv stylua /usr/local/bin/
+
+      - name: Run luacheck
+        run: luacheck Core.lua Options.lua Dock.lua Popup.lua BarShelf.lua CustomShelf.lua --no-color
+
+      - name: Check formatting
+        run: stylua --check Core.lua Options.lua Dock.lua Popup.lua BarShelf.lua CustomShelf.lua
