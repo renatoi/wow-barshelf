@@ -1,4 +1,4 @@
-local _, Barshelf = ...
+local Barshelf = LibStub("AceAddon-3.0"):GetAddon("Barshelf")
 
 ---------------------------------------------------------------------------
 -- Bar shelves reparent Blizzard's own action buttons at their native size.
@@ -168,7 +168,7 @@ function Barshelf:LayoutBarPopup(shelf)
     )
 
     -- Resolve row order: per-shelf override > global setting > auto-detected
-    local rowOrder = config.rowOrder or Barshelf.db.barRowOrder or "auto"
+    local rowOrder = config.rowOrder or Barshelf.db.profile.barRowOrder or "auto"
     local bottomUp
     if rowOrder == "bottomup" then
         bottomUp = true

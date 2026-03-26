@@ -1,4 +1,4 @@
-local _, Barshelf = ...
+local Barshelf = LibStub("AceAddon-3.0"):GetAddon("Barshelf")
 
 local POPUP_INSET = 6
 
@@ -20,7 +20,7 @@ function Barshelf:CreatePopup(shelf)
         tile = true, tileSize = 16, edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
     })
-    popup:SetBackdropColor(0.05, 0.05, 0.05, Barshelf.db.popupBgAlpha or 0.92)
+    popup:SetBackdropColor(0.05, 0.05, 0.05, Barshelf.db.profile.popupBgAlpha or 0.92)
     popup:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.9)
 
     -- Prevent mouse-through to the backdrop
@@ -43,9 +43,9 @@ function Barshelf:CreatePopup(shelf)
     -- OnShow: fade-in + show backdrop
     popup:HookScript("OnShow", function(frame)
         if not InCombatLockdown() then
-            if Barshelf.db.animatePopups then
+            if Barshelf.db.profile.animatePopups then
                 frame:SetAlpha(0)
-                alphaAnim:SetDuration(Barshelf.db.animationDuration or 0.15)
+                alphaAnim:SetDuration(Barshelf.db.profile.animationDuration or 0.15)
                 fadeIn:Play()
             end
             if Barshelf.backdrop then Barshelf.backdrop:Show() end

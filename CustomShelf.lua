@@ -1,4 +1,4 @@
-local _, Barshelf = ...
+local Barshelf = LibStub("AceAddon-3.0"):GetAddon("Barshelf")
 
 ---------------------------------------------------------------------------
 -- Create a custom shelf (user-assigned spells / items / macros)

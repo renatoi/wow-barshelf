@@ -1,4 +1,4 @@
-local _, Barshelf = ...
+local Barshelf = LibStub("AceAddon-3.0"):GetAddon("Barshelf")
 
 ---------------------------------------------------------------------------
 -- Dock mixin
@@ -75,7 +75,7 @@ function DockMixin:CreateHandle(shelf)
     -- Background
     local bg = handle:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
-    bg:SetColorTexture(0.12, 0.12, 0.12, Barshelf.db.handleBgAlpha or 0.85)
+    bg:SetColorTexture(0.12, 0.12, 0.12, Barshelf.db.profile.handleBgAlpha or 0.85)
     handle.bg = bg
 
     -- Highlight
@@ -189,7 +189,7 @@ end
 function DockMixin:LayoutHandles()
     local isH      = (self.config.orientation or "HORIZONTAL") == "HORIZONTAL"
     local spacing  = 1
-    local dockPad  = Barshelf.db.dockPadding or 4
+    local dockPad  = Barshelf.db.profile.dockPadding or 4
     local gripSize = 12
 
     local visible = {}
@@ -265,16 +265,16 @@ function Barshelf:CreateDock(config)
     dock.config = config
     dock.orderedShelves = {}
 
-    local showBorder = Barshelf.db.dockShowBorder ~= false
+    local showBorder = Barshelf.db.profile.dockShowBorder ~= false
     dock:SetBackdrop({
         bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
         edgeFile = showBorder and "Interface/Tooltips/UI-Tooltip-Border" or nil,
         tile = true, tileSize = 16, edgeSize = showBorder and 10 or 0,
         insets = showBorder and { left = 2, right = 2, top = 2, bottom = 2 } or { left = 0, right = 0, top = 0, bottom = 0 },
     })
-    dock:SetBackdropColor(0.08, 0.08, 0.08, Barshelf.db.dockBgAlpha or 0.75)
+    dock:SetBackdropColor(0.08, 0.08, 0.08, Barshelf.db.profile.dockBgAlpha or 0.75)
     if showBorder then
-        dock:SetBackdropBorderColor(0.35, 0.35, 0.35, Barshelf.db.dockBorderAlpha or 0.8)
+        dock:SetBackdropBorderColor(0.35, 0.35, 0.35, Barshelf.db.profile.dockBorderAlpha or 0.8)
     end
 
     dock:SetMovable(true)

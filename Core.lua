@@ -1,5 +1,4 @@
-local ADDON_NAME, Barshelf = ...
-_G.Barshelf = Barshelf
+Barshelf = LibStub("AceAddon-3.0"):NewAddon("Barshelf", "AceConsole-3.0", "AceEvent-3.0")
 
 Barshelf.version = "1.0.0"
 Barshelf.docks = {}        -- dockID -> dock frame
@@ -22,51 +21,47 @@ Barshelf.BAR_INFO = {
 }
 
 ---------------------------------------------------------------------------
--- Saved variable defaults
+-- Saved variable defaults (AceDB format)
 ---------------------------------------------------------------------------
-local DEFAULTS = {
-    closeOthers = true,
-    showMinimap = true,
-    animatePopups = true,
-    animationDuration = 0.15,
-    dockBgAlpha = 0.75,
-    dockBorderAlpha = 0.8,
-    dockShowBorder = true,
-    dockPadding = 4,
-    popupBgAlpha = 0.92,
-    handleBgAlpha = 0.85,
-    handleIconSize = 16,
-    handleFontSize = 12,
-    barRowOrder = "auto",  -- "auto" (detect from Blizzard), "topdown", "bottomup"
-    barIconSize = nil,     -- nil = use Blizzard's native size per bar
-    barIconPadding = nil,  -- nil = use Blizzard's native padding per bar
-    docks = {
-        { id = 1, name = "Main", point = nil, orientation = "HORIZONTAL" },
+local defaults = {
+    profile = {
+        closeOthers = true,
+        showMinimap = true,
+        animatePopups = true,
+        animationDuration = 0.15,
+        dockBgAlpha = 0.75,
+        dockBorderAlpha = 0.8,
+        dockShowBorder = true,
+        dockPadding = 4,
+        popupBgAlpha = 0.92,
+        handleBgAlpha = 0.85,
+        handleIconSize = 16,
+        handleFontSize = 12,
+        barRowOrder = "auto",
+        barIconSize = nil,
+        barIconPadding = nil,
+        docks = {
+            { id = 1, name = "Main", point = nil, orientation = "HORIZONTAL" },
+        },
+        shelves = {},
+        nextDockID = 2,
+        nextShelfID = 1,
+        minimap = { hide = false },
     },
-    shelves = {},
-    nextDockID = 2,
-    nextShelfID = 1,
-    minimap = { hide = false },
 }
 
 ---------------------------------------------------------------------------
--- Utility
+-- SavedVariable migration (pre-AceDB -> AceDB)
 ---------------------------------------------------------------------------
-local function DeepCopy(orig)
-    if type(orig) ~= "table" then return orig end
-    local copy = {}
-    for k, v in pairs(orig) do copy[k] = DeepCopy(v) end
-    return copy
-end
-
-local function MergeDefaults(target, defaults)
-    for k, v in pairs(defaults) do
-        if target[k] == nil then
-            target[k] = DeepCopy(v)
-        elseif type(v) == "table" and type(target[k]) == "table" and not v[1] then
-            MergeDefaults(target[k], v)
-        end
-    end
+function Barshelf:MigrateOldDB()
+    if not BarshelfDB then return end
+    if BarshelfDB.profiles then return end  -- already AceDB
+    local old = BarshelfDB
+    local charKey = UnitName("player") .. " - " .. GetRealmName()
+    BarshelfDB = {
+        profileKeys = { [charKey] = charKey },
+        profiles = { [charKey] = old },
+    }
 end
 
 ---------------------------------------------------------------------------
@@ -131,7 +126,7 @@ function Barshelf:UpdateAllSecureRefs()
                 end
             end
             shelf.handle:SetAttribute("otherpopupcount", count)
-            shelf.handle:SetAttribute("closeOthers", self.db.closeOthers)
+            shelf.handle:SetAttribute("closeOthers", self.db.profile.closeOthers)
         end
     end
 end
@@ -151,8 +146,6 @@ function Barshelf:CreateBackdrop()
         self.showTime = GetTime()
     end)
     f:SetScript("OnClick", function(self)
-        -- Ignore clicks that arrive in the same frame as the backdrop showing,
-        -- prevents the click that opened the popup from immediately closing it
         if GetTime() - (self.showTime or 0) < 0.15 then return end
         if not InCombatLockdown() then
             Barshelf:CloseAllPopups()
@@ -160,8 +153,6 @@ function Barshelf:CreateBackdrop()
     end)
     self.backdrop = f
 
-    -- ESC-to-close helper: shown while any popup is open,
-    -- WoW's ESC handler hides it which triggers CloseAllPopups
     local esc = CreateFrame("Frame", "BarshelfEscHelper", UIParent)
     esc:Hide()
     esc:SetScript("OnHide", function()
@@ -201,10 +192,10 @@ function Barshelf:RebuildAll()
     end
     self:TeardownAll()
 
-    for _, dockCfg in ipairs(self.db.docks) do
+    for _, dockCfg in ipairs(self.db.profile.docks) do
         self:CreateDock(dockCfg)
     end
-    for i, shelfCfg in ipairs(self.db.shelves) do
+    for i, shelfCfg in ipairs(self.db.profile.shelves) do
         if shelfCfg.enabled then
             self:CreateShelf(shelfCfg, i)
         end
@@ -217,7 +208,6 @@ function Barshelf:TeardownAll()
         self:QueueForCombat(function() self:TeardownAll() end)
         return
     end
-    -- Deactivate shelves
     for _, shelf in ipairs(self.shelves) do
         if shelf.type == "bar" then
             self:DeactivateBarShelf(shelf)
@@ -228,7 +218,6 @@ function Barshelf:TeardownAll()
         if shelf.popup then shelf.popup:Hide() end
     end
     wipe(self.shelves)
-    -- Hide docks
     for id, dock in pairs(self.docks) do
         dock:Hide()
     end
@@ -239,19 +228,16 @@ end
 -- Add / remove helpers for config
 ---------------------------------------------------------------------------
 function Barshelf:AddBarShelf(barID, dockID)
-    -- Prevent duplicate bar assignment
-    for _, cfg in ipairs(self.db.shelves) do
+    for _, cfg in ipairs(self.db.profile.shelves) do
         if cfg.type == "bar" and cfg.barID == barID and cfg.enabled then
-            print("|cff00ccffBarshelf:|r Bar " .. barID .. " is already on a shelf.")
+            self:Print("Bar " .. barID .. " is already on a shelf.")
             return nil
         end
     end
     local info = self.BAR_INFO[barID]
 
-    -- Auto-detect Blizzard's Edit Mode configuration from button state
     local visibleCount, rowCount, btnSize, btnPadding = 12, 1, 36, 2
     if info then
-        -- Count visible buttons (respects "# of Icons")
         visibleCount = 0
         for i = 1, info.count do
             local btn = _G[info.prefix .. i]
@@ -259,7 +245,6 @@ function Barshelf:AddBarShelf(barID, dockID)
         end
         if visibleCount == 0 then visibleCount = info.count end
 
-        -- Detect rows from distinct Y positions (respects "# of Rows")
         local ys = {}
         for i = 1, visibleCount do
             local btn = _G[info.prefix .. i]
@@ -276,13 +261,11 @@ function Barshelf:AddBarShelf(barID, dockID)
         end
         rowCount = math.max(#ys, 1)
 
-        -- Read icon size and padding from first button (respects "Icon Size" / "Icon Padding")
         local firstBtn = _G[info.prefix .. "1"]
         if firstBtn then
             local w = firstBtn:GetWidth()
             if w and w > 0 then btnSize = math.floor(w + 0.5) end
         end
-        -- Detect padding from gap between first two buttons
         local btn1, btn2 = _G[info.prefix .. "1"], _G[info.prefix .. "2"]
         if btn1 and btn2 then
             local x1 = btn1:GetLeft()
@@ -296,7 +279,6 @@ function Barshelf:AddBarShelf(barID, dockID)
 
     local cols = math.ceil(visibleCount / rowCount)
 
-    -- Detect if Blizzard lays out rows bottom-up (common for bottom-anchored bars)
     local bottomUp = false
     if rowCount > 1 and cols > 0 and info then
         local btn1 = _G[info.prefix .. "1"]
@@ -317,16 +299,16 @@ function Barshelf:AddBarShelf(barID, dockID)
         enabled = true,
         label = info and info.label or ("Bar " .. barID),
         displayMode = "both",
-        iconSize = self.db.handleIconSize or 16,
-        labelFontSize = self.db.handleFontSize or 12,
+        iconSize = self.db.profile.handleIconSize or 16,
+        labelFontSize = self.db.profile.handleFontSize or 12,
         numButtons = visibleCount,
         numRows = rowCount,
-        buttonSize = self.db.barIconSize or btnSize,
-        buttonPadding = self.db.barIconPadding or btnPadding,
+        buttonSize = self.db.profile.barIconSize or btnSize,
+        buttonPadding = self.db.profile.barIconPadding or btnPadding,
         popupAnchor = "AUTO",
         bottomUp = bottomUp,
     }
-    table.insert(self.db.shelves, cfg)
+    table.insert(self.db.profile.shelves, cfg)
     self:RebuildAll()
     return cfg
 end
@@ -338,8 +320,8 @@ function Barshelf:AddCustomShelf(label, dockID)
         enabled = true,
         label = label or "Custom",
         displayMode = "both",
-        iconSize = self.db.handleIconSize or 16,
-        labelFontSize = self.db.handleFontSize or 12,
+        iconSize = self.db.profile.handleIconSize or 16,
+        labelFontSize = self.db.profile.handleFontSize or 12,
         numButtons = 6,
         numRows = 1,
         buttonSize = 36,
@@ -347,66 +329,73 @@ function Barshelf:AddCustomShelf(label, dockID)
         popupAnchor = "AUTO",
         buttons = {},
     }
-    table.insert(self.db.shelves, cfg)
+    table.insert(self.db.profile.shelves, cfg)
     self:RebuildAll()
     return cfg
 end
 
 function Barshelf:RemoveShelf(index)
-    if not self.db.shelves[index] then return end
-    table.remove(self.db.shelves, index)
+    if not self.db.profile.shelves[index] then return end
+    table.remove(self.db.profile.shelves, index)
     self:RebuildAll()
 end
 
 function Barshelf:AddDock(name)
-    local id = self.db.nextDockID
-    self.db.nextDockID = id + 1
+    local id = self.db.profile.nextDockID
+    self.db.profile.nextDockID = id + 1
     local cfg = { id = id, name = name or ("Dock " .. id), point = nil, orientation = "HORIZONTAL" }
-    table.insert(self.db.docks, cfg)
+    table.insert(self.db.profile.docks, cfg)
     self:RebuildAll()
     return cfg
 end
 
 function Barshelf:RemoveDock(dockID)
     if dockID == 1 then
-        print("|cff00ccffBarshelf:|r Cannot remove the default dock.")
+        self:Print("Cannot remove the default dock.")
         return
     end
-    -- Move shelves from removed dock to dock 1
-    for _, cfg in ipairs(self.db.shelves) do
+    for _, cfg in ipairs(self.db.profile.shelves) do
         if cfg.dockID == dockID then cfg.dockID = 1 end
     end
-    for i, d in ipairs(self.db.docks) do
-        if d.id == dockID then table.remove(self.db.docks, i); break end
+    for i, d in ipairs(self.db.profile.docks) do
+        if d.id == dockID then table.remove(self.db.profile.docks, i); break end
     end
     self:RebuildAll()
 end
 
 function Barshelf:ResetAllDockPositions()
-    for _, dockCfg in ipairs(self.db.docks) do
+    for _, dockCfg in ipairs(self.db.profile.docks) do
         dockCfg.point = nil
     end
     self:RebuildAll()
 end
 
 ---------------------------------------------------------------------------
--- Init & Events
+-- AceAddon lifecycle
 ---------------------------------------------------------------------------
-function Barshelf:Init()
-    if not BarshelfDB then
-        BarshelfDB = DeepCopy(DEFAULTS)
+function Barshelf:OnInitialize()
+    self:MigrateOldDB()
+    self.db = LibStub("AceDB-3.0"):New("BarshelfDB", defaults, true)
+
+    self.db.RegisterCallback(self, "OnProfileChanged", "RebuildAll")
+    self.db.RegisterCallback(self, "OnProfileCopied", "RebuildAll")
+    self.db.RegisterCallback(self, "OnProfileReset", "RebuildAll")
+
+    self:RegisterChatCommand("barshelf", "ChatCommand")
+    self:RegisterChatCommand("bs", "ChatCommand")
+
+    if self.SetupOptions then
+        self:SetupOptions()
     end
-    self.db = BarshelfDB
-    MergeDefaults(self.db, DEFAULTS)
 end
 
-function Barshelf:Setup()
+function Barshelf:OnEnable()
     self:CreateBackdrop()
 
-    for _, dockCfg in ipairs(self.db.docks) do
+    for _, dockCfg in ipairs(self.db.profile.docks) do
         self:CreateDock(dockCfg)
     end
-    for i, shelfCfg in ipairs(self.db.shelves) do
+    for i, shelfCfg in ipairs(self.db.profile.shelves) do
         if shelfCfg.enabled then
             self:CreateShelf(shelfCfg, i)
         end
@@ -414,46 +403,48 @@ function Barshelf:Setup()
 
     self:UpdateAllSecureRefs()
     self:SetupMinimapIcon()
+
+    self:RegisterEvent("PLAYER_REGEN_DISABLED")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
-local eventFrame = CreateFrame("Frame")
-eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-eventFrame:SetScript("OnEvent", function(_, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        Barshelf:Init()
-        eventFrame:UnregisterEvent("ADDON_LOADED")
-    elseif event == "PLAYER_LOGIN" then
-        Barshelf:Setup()
-        eventFrame:UnregisterEvent("PLAYER_LOGIN")
-    elseif event == "PLAYER_REGEN_DISABLED" then
-        Barshelf.inCombat = true
-        -- Close config panel if open
-        if Barshelf.configFrame and Barshelf.configFrame:IsShown() then
-            Barshelf.configFrame:Hide()
-        end
-    elseif event == "PLAYER_REGEN_ENABLED" then
-        Barshelf.inCombat = false
-        Barshelf:ProcessCombatQueue()
-    end
-end)
+---------------------------------------------------------------------------
+-- Event handlers
+---------------------------------------------------------------------------
+function Barshelf:PLAYER_REGEN_DISABLED()
+    self.inCombat = true
+end
+
+function Barshelf:PLAYER_REGEN_ENABLED()
+    self.inCombat = false
+    self:ProcessCombatQueue()
+end
 
 ---------------------------------------------------------------------------
--- Slash commands
+-- Slash command handler
 ---------------------------------------------------------------------------
-SLASH_BARSHELF1 = "/barshelf"
-SLASH_BARSHELF2 = "/bs"
-SlashCmdList["BARSHELF"] = function(msg)
+function Barshelf:ChatCommand(msg)
     msg = strtrim(msg):lower()
     if msg == "reset" then
-        Barshelf:ResetAllDockPositions()
-        print("|cff00ccffBarshelf:|r Dock positions reset.")
+        self:ResetAllDockPositions()
+        self:Print("Dock positions reset.")
     elseif msg == "rebuild" then
-        Barshelf:RebuildAll()
-        print("|cff00ccffBarshelf:|r Rebuilt.")
+        self:RebuildAll()
+        self:Print("Rebuilt.")
     else
-        Barshelf:ToggleConfig()
+        self:ToggleConfig()
+    end
+end
+
+---------------------------------------------------------------------------
+-- Config toggle
+---------------------------------------------------------------------------
+function Barshelf:ToggleConfig()
+    if InCombatLockdown() then
+        self:Print("Cannot open settings in combat.")
+        return
+    end
+    if self.openOptions then
+        self:openOptions()
     end
 end
