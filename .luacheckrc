@@ -9,9 +9,14 @@ exclude_files = {
 ignore = {
 	"11./SLASH_.*",
 	"11./BINDING_.*",
+	"122/StaticPopupDialogs",
 	"212/self",
-	"42.",
-	"43.",
+	"211",            -- Unused local variable
+	"213",            -- Unused loop variable
+	"31./_",          -- Unused/setting non-standard global _
+	"42.",            -- Shadowing a local variable
+	"43.",            -- Shadowing an upvalue
+	"542",            -- Empty if branch
 }
 
 -- WoW API globals
@@ -42,10 +47,13 @@ read_globals = {
 	"GetMacroInfo",
 	"GetRealmName",
 	"GetScreenHeight",
+	"GetTime",
 	"HasAction",
 	"InCombatLockdown",
 	"IsMouseButtonDown",
+	"IsShiftKeyDown",
 	"IsUsableAction",
+	"LibStub",
 	"Mixin",
 	"NumberFontNormal",
 	"NumberFontNormalSmallGray",
@@ -58,10 +66,13 @@ read_globals = {
 	"tinsert",
 	"strtrim",
 	"wipe",
+	"pcall",
+	"ActionButton_Update",
 }
 
 -- Addon globals
 globals = {
 	"Barshelf",
 	"BarshelfDB",
+	"_",
 }
