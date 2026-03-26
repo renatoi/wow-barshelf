@@ -5,6 +5,8 @@
 ## Author: Barshelf Contributors
 ## SavedVariablesPerCharacter: BarshelfDB
 ## IconTexture: Interface\Icons\INV_Misc_Bag_07
+## X-Curse-Project-ID: 1495779
+## X-Wago-ID: qGYZjRNg
 
 embeds.xml
 
