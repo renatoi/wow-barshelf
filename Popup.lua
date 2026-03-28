@@ -40,7 +40,7 @@ function Barshelf:CreatePopup(shelf)
     end)
     popup.fadeIn = fadeIn
 
-    -- OnShow: fade-in + show backdrop
+    -- OnShow: fade-in + show backdrop + stacking + dock alpha
     popup:HookScript("OnShow", function(frame)
         if not InCombatLockdown() then
             if Barshelf.db.profile.animatePopups then
@@ -51,16 +51,45 @@ function Barshelf:CreatePopup(shelf)
             if Barshelf.backdrop then Barshelf.backdrop:Show() end
             if Barshelf.escHelper then Barshelf.escHelper:Show() end
         end
-        Barshelf:UpdatePopupAnchor(frame)
+
+        local dockID = frame.shelf and frame.shelf.config.dockID or 1
+        local dock = Barshelf.docks[dockID]
+
+        if Barshelf.db.profile.stackPopups and not Barshelf.db.profile.closeOthers and dock then
+            Barshelf:LayoutDockPopups(dock)
+        else
+            Barshelf:UpdatePopupAnchor(frame)
+        end
+
+        if dock and dock.UpdateMouseoverAlpha then
+            dock:UpdateMouseoverAlpha()
+        end
     end)
 
-    -- OnHide: manage backdrop
+    -- OnHide: manage backdrop + re-stack + dock alpha
     popup:HookScript("OnHide", function()
         if not InCombatLockdown() then
             if not Barshelf:AnyPopupShown() then
                 if Barshelf.backdrop then Barshelf.backdrop:Hide() end
                 if Barshelf.escHelper then Barshelf.escHelper:Hide() end
             end
+        end
+
+        local dockID = popup.shelf and popup.shelf.config.dockID or 1
+        local dock = Barshelf.docks[dockID]
+
+        -- Re-stack remaining popups after this one hides
+        if Barshelf.db.profile.stackPopups and not Barshelf.db.profile.closeOthers and dock then
+            C_Timer.After(0, function()
+                if not InCombatLockdown() then
+                    Barshelf:LayoutDockPopups(dock)
+                end
+            end)
+        end
+
+        -- Dock mouseover alpha (SetAlpha is safe in combat)
+        if dock and dock.UpdateMouseoverAlpha then
+            dock:UpdateMouseoverAlpha()
         end
     end)
 
@@ -97,6 +126,7 @@ function Barshelf:UpdatePopupAnchor(popup)
         anchor = (hy - ph < 0) and "TOP" or "BOTTOM"
     end
 
+    popup._resolvedAnchor = anchor
     popup:ClearAllPoints()
     if anchor == "BOTTOM" then
         popup:SetPoint("TOP", handle, "BOTTOM", 0, -2)
@@ -106,6 +136,49 @@ function Barshelf:UpdatePopupAnchor(popup)
         popup:SetPoint("RIGHT", handle, "LEFT", -2, 0)
     elseif anchor == "RIGHT" then
         popup:SetPoint("LEFT", handle, "RIGHT", 2, 0)
+    end
+end
+
+---------------------------------------------------------------------------
+-- Stack visible popups for a dock (when stackPopups is on)
+---------------------------------------------------------------------------
+function Barshelf:LayoutDockPopups(dock)
+    if InCombatLockdown() then
+        self:QueueForCombat(function() self:LayoutDockPopups(dock) end)
+        return
+    end
+    if not dock or not dock.orderedShelves then return end
+
+    local visiblePopups = {}
+    for _, shelf in ipairs(dock.orderedShelves) do
+        if shelf.popup and shelf.popup:IsShown() then
+            visiblePopups[#visiblePopups + 1] = shelf.popup
+        end
+    end
+
+    if #visiblePopups == 0 then return end
+
+    -- First popup: anchor to its handle using standard logic
+    self:UpdatePopupAnchor(visiblePopups[1])
+    local stackDir = visiblePopups[1]._resolvedAnchor or "BOTTOM"
+
+    -- Subsequent popups: stack relative to previous
+    local GAP = 2
+    for i = 2, #visiblePopups do
+        local prev = visiblePopups[i - 1]
+        local curr = visiblePopups[i]
+        curr:ClearAllPoints()
+        curr._resolvedAnchor = stackDir
+
+        if stackDir == "BOTTOM" then
+            curr:SetPoint("TOP", prev, "BOTTOM", 0, -GAP)
+        elseif stackDir == "TOP" then
+            curr:SetPoint("BOTTOM", prev, "TOP", 0, GAP)
+        elseif stackDir == "LEFT" then
+            curr:SetPoint("RIGHT", prev, "LEFT", -GAP, 0)
+        elseif stackDir == "RIGHT" then
+            curr:SetPoint("LEFT", prev, "RIGHT", GAP, 0)
+        end
     end
 end
 

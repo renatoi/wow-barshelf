@@ -1,6 +1,6 @@
 Barshelf = LibStub("AceAddon-3.0"):NewAddon("Barshelf", "AceConsole-3.0", "AceEvent-3.0")
 
-Barshelf.version = "1.0.0"
+Barshelf.version = "1.1.0"
 Barshelf.docks = {}        -- dockID -> dock frame
 Barshelf.shelves = {}      -- ordered list of active shelf objects
 Barshelf.combatQueue = {}
@@ -29,6 +29,9 @@ local defaults = {
         showMinimap = true,
         animatePopups = true,
         animationDuration = 0.15,
+        dockIdleAlpha = 1.0,
+        dockFadeDuration = 0.3,
+        stackPopups = true,
         dockBgAlpha = 0.75,
         dockBorderAlpha = 0.8,
         dockShowBorder = true,
@@ -102,6 +105,16 @@ end
 function Barshelf:AnyPopupShown()
     for _, shelf in ipairs(self.shelves) do
         if shelf.popup and shelf.popup:IsShown() then return true end
+    end
+    return false
+end
+
+function Barshelf:AnyDockPopupShown(dockID)
+    for _, shelf in ipairs(self.shelves) do
+        if (shelf.config.dockID or 1) == dockID
+           and shelf.popup and shelf.popup:IsShown() then
+            return true
+        end
     end
     return false
 end
@@ -264,7 +277,7 @@ function Barshelf:AddBarShelf(barID, dockID)
         local firstBtn = _G[info.prefix .. "1"]
         if firstBtn then
             local w = firstBtn:GetWidth()
-            if w and w > 0 then btnSize = math.floor(w + 0.5) end
+            if w and w > 10 then btnSize = math.floor(w + 0.5) end
         end
         local btn1, btn2 = _G[info.prefix .. "1"], _G[info.prefix .. "2"]
         if btn1 and btn2 then

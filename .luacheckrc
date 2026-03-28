@@ -68,6 +68,9 @@ read_globals = {
 	"wipe",
 	"pcall",
 	"ActionButton_Update",
+	"PickupItem",
+	"PickupMacro",
+	"PickupSpell",
 }
 
 -- Addon globals

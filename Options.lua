@@ -312,6 +312,23 @@ local function GetGeneralOptions()
                     Barshelf:UpdateAllSecureRefs()
                 end,
             },
+            stackPopups = {
+                order = 1.5,
+                type = "toggle",
+                name = "Stack open popups",
+                desc = "When multiple popups are open, stack them sequentially instead of overlapping. Only applies when 'Close other popups' is off.",
+                width = "full",
+                disabled = function() return Barshelf.db.profile.closeOthers end,
+                get = function() return Barshelf.db.profile.stackPopups end,
+                set = function(_, v)
+                    Barshelf.db.profile.stackPopups = v
+                    if not InCombatLockdown() then
+                        for _, dock in pairs(Barshelf.docks) do
+                            Barshelf:LayoutDockPopups(dock)
+                        end
+                    end
+                end,
+            },
             animatePopups = {
                 order = 2,
                 type = "toggle",
@@ -320,6 +337,38 @@ local function GetGeneralOptions()
                 width = "full",
                 get = function() return Barshelf.db.profile.animatePopups end,
                 set = function(_, v) Barshelf.db.profile.animatePopups = v end,
+            },
+            dockIdleHeader = {
+                order = 2.5,
+                type = "header",
+                name = "Dock Idle Behavior",
+            },
+            dockIdleAlpha = {
+                order = 2.6,
+                type = "range",
+                name = "Idle dock opacity",
+                desc = "Dock opacity when no popup is open and mouse is not hovering. Set to 1 to disable fading.",
+                min = 0, max = 1, step = 0.05,
+                isPercent = true,
+                get = function() return Barshelf.db.profile.dockIdleAlpha or 1.0 end,
+                set = function(_, v)
+                    Barshelf.db.profile.dockIdleAlpha = v
+                    for _, dock in pairs(Barshelf.docks) do
+                        dock:UpdateMouseoverAlpha()
+                    end
+                end,
+            },
+            dockFadeDuration = {
+                order = 2.7,
+                type = "range",
+                name = "Fade duration",
+                desc = "How long the fade animation takes (seconds).",
+                min = 0, max = 1, step = 0.05,
+                disabled = function() return (Barshelf.db.profile.dockIdleAlpha or 1.0) >= 1.0 end,
+                get = function() return Barshelf.db.profile.dockFadeDuration or 0.3 end,
+                set = function(_, v)
+                    Barshelf.db.profile.dockFadeDuration = v
+                end,
             },
             showMinimap = {
                 order = 3,

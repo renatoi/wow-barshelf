@@ -30,18 +30,41 @@ function Barshelf:CreateCustomButtons(shelf)
 
     for i = 1, num do
         local btnName = "BarshelfCBtn_" .. (shelf.index or 0) .. "_" .. i
+        -- Only SecureActionButtonTemplate — ActionButtonTemplate's PreClick
+        -- overrides our type/spell attributes, preventing spells from casting
         local button  = CreateFrame("Button", btnName, shelf.popup,
-            "SecureActionButtonTemplate, ActionButtonTemplate")
+            "SecureActionButtonTemplate")
         button:SetSize(config.buttonSize or 36, config.buttonSize or 36)
         button:RegisterForClicks("AnyUp", "AnyDown")
+        button:RegisterForDrag("LeftButton")
         button.shelfIndex = i
+
+        -- Prevent secure handler from firing on shift+click
+        -- (shift+click = pickup, shift+right-click = clear)
+        button:SetAttribute("shift-type1", "")
+        button:SetAttribute("shift-type2", "")
+
+        -- Visual elements (replaces ActionButtonTemplate)
+        local bg = button:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.1, 0.1, 0.1, 0.5)
+        button.bg = bg
+
+        local icon = button:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints()
+        button.icon = icon
+
+        button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+
+        local cd = CreateFrame("Cooldown", btnName .. "CD", button, "CooldownFrameTemplate")
+        cd:SetAllPoints()
+        button.cooldown = cd
 
         -- Apply saved action if any
         local bc = config.buttons and config.buttons[i]
         if bc then
             self:ApplyCustomAction(button, bc)
         else
-            -- Empty slot appearance
             self:SetEmptySlotAppearance(button)
         end
 
@@ -51,10 +74,29 @@ function Barshelf:CreateCustomButtons(shelf)
             self:HandleCustomDrop(shelf, i, btn)
         end)
 
-        -- Shift+right-click to clear
+        -- Shift+drag to pick up (like Blizzard action bars)
+        button:SetScript("OnDragStart", function(btn)
+            if InCombatLockdown() then return end
+            if IsShiftKeyDown() then
+                self:PickupCustomSlot(shelf, i, btn)
+            end
+        end)
+
+        -- Handle drops and shift+click pickup/clear
         button:HookScript("OnClick", function(btn, mb)
-            if mb == "RightButton" and IsShiftKeyDown() and not InCombatLockdown() then
-                self:ClearCustomSlot(shelf, i, btn)
+            if InCombatLockdown() then return end
+            if IsShiftKeyDown() then
+                if mb == "RightButton" then
+                    self:ClearCustomSlot(shelf, i, btn)
+                else
+                    self:PickupCustomSlot(shelf, i, btn)
+                end
+                return
+            end
+            -- Handle cursor drops (drag-to-assign)
+            local cursorType = GetCursorInfo()
+            if cursorType then
+                self:HandleCustomDrop(shelf, i, btn)
             end
         end)
 
@@ -63,13 +105,6 @@ function Barshelf:CreateCustomButtons(shelf)
             self:ShowCustomButtonTooltip(btn, shelf, i)
         end)
         button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        -- Cooldown frame (ActionButtonTemplate provides one, but ensure it exists)
-        if not button.cooldown then
-            local cd = CreateFrame("Cooldown", btnName .. "CD", button, "CooldownFrameTemplate")
-            cd:SetAllPoints()
-            button.cooldown = cd
-        end
 
         shelf.buttons[i] = button
     end
@@ -167,6 +202,33 @@ function Barshelf:HandleCustomDrop(shelf, slotIndex, button)
 end
 
 ---------------------------------------------------------------------------
+-- Pick up a slot's action onto the cursor (shift+click, like Blizzard bars)
+---------------------------------------------------------------------------
+function Barshelf:PickupCustomSlot(shelf, slotIndex, button)
+    if InCombatLockdown() then return end
+    local bc = shelf.config.buttons and shelf.config.buttons[slotIndex]
+    if not bc then return end
+
+    if bc.type == "spell" and bc.id then
+        if C_Spell and C_Spell.PickupSpell then
+            C_Spell.PickupSpell(bc.id)
+        elseif PickupSpell then
+            PickupSpell(bc.id)
+        end
+    elseif bc.type == "item" and bc.id then
+        if C_Item and C_Item.PickupItem then
+            C_Item.PickupItem(bc.id)
+        elseif PickupItem then
+            PickupItem(bc.id)
+        end
+    elseif bc.type == "macro" and bc.id then
+        PickupMacro(bc.id)
+    end
+
+    self:ClearCustomSlot(shelf, slotIndex, button)
+end
+
+---------------------------------------------------------------------------
 -- Clear a slot
 ---------------------------------------------------------------------------
 function Barshelf:ClearCustomSlot(shelf, slotIndex, button)
@@ -193,7 +255,6 @@ function Barshelf:ShowCustomButtonTooltip(button, shelf, slotIndex)
     if not bc then
         GameTooltip:AddLine("Empty Slot", 0.5, 0.5, 0.5)
         GameTooltip:AddLine("Drag a spell, item, or macro here", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Shift+Right-click to clear", 0.5, 0.5, 0.5)
     else
         if bc.type == "spell" and bc.id then
             local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(bc.id)
@@ -205,7 +266,7 @@ function Barshelf:ShowCustomButtonTooltip(button, shelf, slotIndex)
             local name = GetMacroInfo(bc.id)
             GameTooltip:AddLine(name or ("Macro #" .. bc.id), 1, 1, 1)
         end
-        GameTooltip:AddLine("Shift+Right-click to clear", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine("Shift+click to pick up | Shift+Right-click to clear", 0.5, 0.5, 0.5)
     end
     GameTooltip:Show()
 end

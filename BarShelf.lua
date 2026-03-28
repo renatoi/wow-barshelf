@@ -137,11 +137,15 @@ function Barshelf:LayoutBarPopup(shelf)
     local num     = config.numButtons    or 12
     local bpad    = config.buttonPadding or 2
 
-    -- Read the first button's native size
+    -- Read the first button's native size (guard against uninitialized frames
+    -- reporting 0 during early load — TWW overhauled the action bar system)
     local nativeSize = 36
     for i = 1, num do
         if buttons[i] then
-            nativeSize = math.max(buttons[i]:GetWidth(), buttons[i]:GetHeight())
+            local w, h = buttons[i]:GetWidth(), buttons[i]:GetHeight()
+            if w > 10 or h > 10 then
+                nativeSize = math.max(w, h)
+            end
             break
         end
     end

@@ -12,6 +12,75 @@ function DockMixin:SavePosition()
     end
 end
 
+function DockMixin:FadeTo(targetAlpha)
+    -- Already at or animating toward this target — skip
+    if self._targetAlpha == targetAlpha then
+        if self.fadeGroup and self.fadeGroup:IsPlaying() then return end
+        if math.abs(self:GetAlpha() - targetAlpha) < 0.01 then return end
+    end
+
+    self._targetAlpha = targetAlpha
+    local duration = Barshelf.db.profile.dockFadeDuration or 0.3
+
+    if self.fadeGroup and self.fadeGroup:IsPlaying() then
+        self.fadeGroup:Stop()
+        self:SetAlpha(self:GetAlpha()) -- pin current alpha before restarting
+    end
+
+    local current = self:GetAlpha()
+    if math.abs(current - targetAlpha) < 0.01 then
+        self:SetAlpha(targetAlpha)
+        return
+    end
+
+    if duration <= 0 or not self.fadeGroup then
+        self:SetAlpha(targetAlpha)
+        return
+    end
+
+    self.fadeAnim:SetFromAlpha(current)
+    self.fadeAnim:SetToAlpha(targetAlpha)
+    self.fadeAnim:SetDuration(duration)
+    self.fadeGroup:Play()
+end
+
+function DockMixin:UpdateMouseoverAlpha()
+    local idleAlpha = Barshelf.db.profile.dockIdleAlpha
+    if idleAlpha == nil then idleAlpha = 1.0 end
+
+    -- Cancel pending poll
+    if self._fadeTimer then
+        self._fadeTimer:Cancel()
+        self._fadeTimer = nil
+    end
+
+    -- Feature off: full opacity, no polling
+    if idleAlpha >= 1.0 then
+        self:FadeTo(1)
+        return
+    end
+
+    local dockID = self.config.id
+
+    -- Always fully visible when a popup is open or during drag
+    if Barshelf:AnyDockPopupShown(dockID) or self._isDragging then
+        self:FadeTo(1)
+        return
+    end
+
+    if self:IsMouseOver() then
+        -- Mouse is over dock or a child; stay visible and poll for exit
+        self:FadeTo(1)
+        self._fadeTimer = C_Timer.NewTimer(0.2, function()
+            self._fadeTimer = nil
+            self:UpdateMouseoverAlpha()
+        end)
+    else
+        -- Idle: fade to idle alpha
+        self:FadeTo(idleAlpha)
+    end
+end
+
 function DockMixin:AddShelf(shelf)
     table.insert(self.orderedShelves, shelf)
     self:CreateHandle(shelf)
@@ -285,6 +354,7 @@ function Barshelf:CreateDock(config)
     -- Manual drag: track mouse offset to avoid StartMoving() snap issues
     local function BeginDockDrag()
         if InCombatLockdown() or dock._isDragging then return end
+        dock:SetAlpha(1)
         local scale = dock:GetEffectiveScale()
         local cx, cy = GetCursorPosition()
         dock._dragOffsetX = cx / scale - (dock:GetLeft() or 0)
@@ -305,6 +375,7 @@ function Barshelf:CreateDock(config)
         dock._isDragging = false
         dock:SetScript("OnUpdate", nil)
         dock:SavePosition()
+        dock:UpdateMouseoverAlpha()
     end
 
     dock:SetScript("OnDragStart", function() BeginDockDrag() end)
@@ -334,6 +405,23 @@ function Barshelf:CreateDock(config)
     end
     dock.grip = grip
 
+    -- Fade animation for idle alpha transitions
+    local fadeGroup = dock:CreateAnimationGroup()
+    local fadeAnim = fadeGroup:CreateAnimation("Alpha")
+    fadeAnim:SetSmoothing("OUT")
+    fadeGroup:SetScript("OnFinished", function()
+        dock:SetAlpha(dock._targetAlpha or 1)
+    end)
+    dock.fadeGroup = fadeGroup
+    dock.fadeAnim = fadeAnim
+
+    dock:SetScript("OnEnter", function(self)
+        self:UpdateMouseoverAlpha()
+    end)
+    dock:SetScript("OnLeave", function(self)
+        self:UpdateMouseoverAlpha()
+    end)
+
     dock:SetFrameStrata("DIALOG")
     dock:SetFrameLevel(2)
     dock:SetSize(10, 10)
@@ -342,6 +430,11 @@ function Barshelf:CreateDock(config)
         dock:SetPoint(config.point[1], UIParent, config.point[2], config.point[3], config.point[4])
     else
         dock:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
+    end
+
+    local idleAlpha = Barshelf.db.profile.dockIdleAlpha
+    if idleAlpha ~= nil and idleAlpha < 1.0 then
+        dock:SetAlpha(idleAlpha)
     end
 
     self.docks[id] = dock
