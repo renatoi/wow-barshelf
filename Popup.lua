@@ -1,4 +1,5 @@
 local Barshelf = LibStub("AceAddon-3.0"):GetAddon("Barshelf")
+local L = Barshelf_L
 
 local POPUP_INSET = 6
 
@@ -42,9 +43,25 @@ function Barshelf:CreatePopup(shelf)
   end)
   popup.fadeIn = fadeIn
 
-  -- OnShow: fade-in + show backdrop + stacking + dock alpha
+  -- OnShow: raise to top + fade-in + show backdrop + stacking + dock alpha
   popup:HookScript("OnShow", function(frame)
+    -- Bag shelves use an invisible popup; hide immediately and skip all logic
+    if frame.shelf and frame.shelf.config.type == "bags" then
+      if not InCombatLockdown() then
+        frame:Hide()
+      end
+      return
+    end
+
+    -- Raise above other popups (gap of 20 clears child frame levels)
+    -- SetFrameLevel is protected on secure frames during combat
     if not InCombatLockdown() then
+      Barshelf._popupZCounter = (Barshelf._popupZCounter or 10) + 20
+      frame:SetFrameLevel(Barshelf._popupZCounter)
+    end
+    local isPinned = frame.shelf and frame.shelf.config.pinned
+
+    if not InCombatLockdown() and not isPinned then
       if Barshelf.db.profile.animatePopups then
         frame:SetAlpha(0)
         alphaAnim:SetDuration(Barshelf.db.profile.animationDuration or 0.15)
@@ -58,22 +75,41 @@ function Barshelf:CreatePopup(shelf)
       end
     end
 
-    local dockID = frame.shelf and frame.shelf.config.dockID or 1
-    local dock = Barshelf.docks[dockID]
-
-    if Barshelf.db.profile.stackPopups and not Barshelf.db.profile.closeOthers and dock then
-      Barshelf:LayoutDockPopups(dock)
+    if isPinned then
+      -- Restore saved position when re-shown via handle toggle
+      if not InCombatLockdown() then
+        local pt = frame.shelf and frame.shelf.config.pinnedPoint
+        if pt then
+          frame:ClearAllPoints()
+          frame:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
+        end
+      end
+      if frame.UpdatePinnedAlpha then
+        frame:UpdatePinnedAlpha()
+      end
     else
-      Barshelf:UpdatePopupAnchor(frame)
-    end
+      -- Anchor/stacking requires SetPoint which is protected on secure frames
+      if not InCombatLockdown() then
+        local dockID = frame.shelf and frame.shelf.config.dockID or 1
+        local dock = Barshelf.docks[dockID]
 
-    if dock and dock.UpdateMouseoverAlpha then
-      dock:UpdateMouseoverAlpha()
+        if Barshelf.db.profile.stackPopups and not Barshelf.db.profile.closeOthers and dock then
+          Barshelf:LayoutDockPopups(dock)
+        else
+          Barshelf:UpdatePopupAnchor(frame)
+        end
+
+        if dock and dock.UpdateMouseoverAlpha then
+          dock:UpdateMouseoverAlpha()
+        end
+      end
     end
   end)
 
   -- OnHide: manage backdrop + re-stack + dock alpha
   popup:HookScript("OnHide", function()
+    local isPinned = popup.shelf and popup.shelf.config.pinned
+
     if not InCombatLockdown() then
       if not Barshelf:AnyPopupShown() then
         if Barshelf.backdrop then
@@ -85,21 +121,27 @@ function Barshelf:CreatePopup(shelf)
       end
     end
 
-    local dockID = popup.shelf and popup.shelf.config.dockID or 1
-    local dock = Barshelf.docks[dockID]
-
-    -- Re-stack remaining popups after this one hides
-    if Barshelf.db.profile.stackPopups and not Barshelf.db.profile.closeOthers and dock then
-      C_Timer.After(0, function()
-        if not InCombatLockdown() then
-          Barshelf:LayoutDockPopups(dock)
-        end
-      end)
+    -- Cancel pinned fade timer
+    if popup._pinnedFadeTimer then
+      popup._pinnedFadeTimer:Cancel()
+      popup._pinnedFadeTimer = nil
     end
 
-    -- Dock mouseover alpha (SetAlpha is safe in combat)
-    if dock and dock.UpdateMouseoverAlpha then
-      dock:UpdateMouseoverAlpha()
+    if not isPinned then
+      local dockID = popup.shelf and popup.shelf.config.dockID or 1
+      local dock = Barshelf.docks[dockID]
+
+      if Barshelf.db.profile.stackPopups and not Barshelf.db.profile.closeOthers and dock then
+        C_Timer.After(0, function()
+          if not InCombatLockdown() then
+            Barshelf:LayoutDockPopups(dock)
+          end
+        end)
+      end
+
+      if dock and dock.UpdateMouseoverAlpha then
+        dock:UpdateMouseoverAlpha()
+      end
     end
   end)
 
@@ -122,7 +164,12 @@ function Barshelf:UpdatePopupAnchor(popup)
 
   local config = shelf.config
   local handle = shelf.handle
-  local anchor = config.popupAnchor or "AUTO"
+  local anchor
+  if config.overrideAppearance then
+    anchor = config.popupAnchor or "AUTO"
+  else
+    anchor = Barshelf.db.profile.defaultPopupAnchor or "AUTO"
+  end
 
   if anchor == "AUTO" then
     local scale = handle:GetEffectiveScale()
@@ -169,7 +216,7 @@ function Barshelf:LayoutDockPopups(dock)
 
   local visiblePopups = {}
   for _, shelf in ipairs(dock.orderedShelves) do
-    if shelf.popup and shelf.popup:IsShown() then
+    if shelf.popup and shelf.popup:IsShown() and not shelf.config.pinned then
       visiblePopups[#visiblePopups + 1] = shelf.popup
     end
   end
@@ -200,6 +247,197 @@ function Barshelf:LayoutDockPopups(dock)
       curr:SetPoint("LEFT", prev, "RIGHT", GAP, 0)
     end
   end
+end
+
+---------------------------------------------------------------------------
+-- Pinned popup: drag + fade setup
+---------------------------------------------------------------------------
+function Barshelf:SetupPopupPinning(shelf)
+  local popup = shelf.popup
+  if not popup or not shelf.config.pinned then
+    return
+  end
+
+  -- Already set up (e.g., after RebuildAll re-calls ShowPinnedPopups)
+  if popup._pinnedSetup then
+    if popup.UpdatePinnedAlpha then
+      popup:UpdatePinnedAlpha()
+    end
+    return
+  end
+  popup._pinnedSetup = true
+
+  -- Drag via grip child frame (avoids OnUpdate conflict with bar shelf watchdog)
+  popup:SetMovable(true)
+
+  local grip = CreateFrame("Frame", nil, popup)
+  grip:SetHeight(12)
+  grip:SetPoint("TOPLEFT", popup, "TOPLEFT", 3, -3)
+  grip:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -3, -3)
+  grip:EnableMouse(true)
+  grip:RegisterForDrag("LeftButton")
+
+  -- Grip dot pattern (same style as dock grip)
+  for row = 0, 1 do
+    for col = 0, 2 do
+      local dot = grip:CreateTexture(nil, "ARTWORK")
+      dot:SetSize(2, 2)
+      dot:SetColorTexture(0.5, 0.5, 0.5, 0.7)
+      dot:SetPoint("CENTER", grip, "CENTER", (col - 1) * 4, (0.5 - row) * 4)
+    end
+  end
+
+  grip:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine(L["Drag to move"], 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+  end)
+  grip:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+  end)
+
+  local dragTicker = CreateFrame("Frame")
+  local function BeginPopupDrag()
+    if InCombatLockdown() or popup._isDragging then
+      return
+    end
+    popup._isDragging = true
+    popup:SetAlpha(1)
+    local scale = popup:GetEffectiveScale()
+    local cx, cy = GetCursorPosition()
+    popup._dragOffsetX = cx / scale - (popup:GetLeft() or 0)
+    popup._dragOffsetY = cy / scale - (popup:GetTop() or 0)
+    dragTicker:SetScript("OnUpdate", function()
+      if not popup._isDragging then
+        return
+      end
+      local s = popup:GetEffectiveScale()
+      local mx, my = GetCursorPosition()
+      popup:ClearAllPoints()
+      popup:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", mx / s - popup._dragOffsetX, my / s - popup._dragOffsetY)
+    end)
+  end
+  local function EndPopupDrag()
+    if not popup._isDragging then
+      return
+    end
+    popup._isDragging = false
+    dragTicker:SetScript("OnUpdate", nil)
+    local point, _, relPoint, x, y = popup:GetPoint()
+    if point then
+      shelf.config.pinnedPoint = { point, relPoint, x, y }
+    end
+    if popup.UpdatePinnedAlpha then
+      popup:UpdatePinnedAlpha()
+    end
+  end
+
+  grip:SetScript("OnDragStart", BeginPopupDrag)
+  grip:SetScript("OnDragStop", EndPopupDrag)
+  popup._pinnedGrip = grip
+  popup._pinnedDragTicker = dragTicker
+
+  -- Fade animation group (separate from the open fade-in animation)
+  local fg = popup:CreateAnimationGroup()
+  local fa = fg:CreateAnimation("Alpha")
+  fa:SetSmoothing("OUT")
+  fg:SetScript("OnFinished", function()
+    popup:SetAlpha(popup._pinnedTargetAlpha or 1)
+  end)
+  popup._pinnedFadeGroup = fg
+  popup._pinnedFadeAnim = fa
+
+  function popup:PinnedFadeTo(targetAlpha)
+    if self._pinnedTargetAlpha == targetAlpha then
+      if self._pinnedFadeGroup and self._pinnedFadeGroup:IsPlaying() then
+        return
+      end
+      if math.abs(self:GetAlpha() - targetAlpha) < 0.01 then
+        return
+      end
+    end
+    self._pinnedTargetAlpha = targetAlpha
+    local duration = Barshelf.db.profile.dockFadeDuration or 0.3
+    if self._pinnedFadeGroup:IsPlaying() then
+      self._pinnedFadeGroup:Stop()
+      self:SetAlpha(self:GetAlpha())
+    end
+    local current = self:GetAlpha()
+    if math.abs(current - targetAlpha) < 0.01 then
+      self:SetAlpha(targetAlpha)
+      return
+    end
+    if duration <= 0 then
+      self:SetAlpha(targetAlpha)
+      return
+    end
+    self._pinnedFadeAnim:SetFromAlpha(current)
+    self._pinnedFadeAnim:SetToAlpha(targetAlpha)
+    self._pinnedFadeAnim:SetDuration(duration)
+    self._pinnedFadeGroup:Play()
+  end
+
+  function popup:UpdatePinnedAlpha()
+    local idleAlpha = shelf.config.popupIdleAlpha or 1.0
+    if self._pinnedFadeTimer then
+      self._pinnedFadeTimer:Cancel()
+      self._pinnedFadeTimer = nil
+    end
+    if idleAlpha >= 1.0 then
+      self:PinnedFadeTo(1)
+      return
+    end
+    if self._isDragging then
+      self:PinnedFadeTo(1)
+      return
+    end
+    if self:IsMouseOver() then
+      self:PinnedFadeTo(1)
+      self._pinnedFadeTimer = C_Timer.NewTimer(0.2, function()
+        self._pinnedFadeTimer = nil
+        self:UpdatePinnedAlpha()
+      end)
+    else
+      self:PinnedFadeTo(idleAlpha)
+    end
+  end
+
+  -- Wire enter/leave for fade
+  popup:HookScript("OnEnter", function(self)
+    if self.UpdatePinnedAlpha and shelf.config.pinned then
+      self:UpdatePinnedAlpha()
+    end
+  end)
+  popup:HookScript("OnLeave", function(self)
+    if self.UpdatePinnedAlpha and shelf.config.pinned then
+      self:UpdatePinnedAlpha()
+    end
+  end)
+
+  popup:UpdatePinnedAlpha()
+end
+
+function Barshelf:CleanupPopupPinning(shelf)
+  local popup = shelf.popup
+  if not popup then
+    return
+  end
+
+  if popup._pinnedFadeTimer then
+    popup._pinnedFadeTimer:Cancel()
+    popup._pinnedFadeTimer = nil
+  end
+  if popup._pinnedGrip then
+    popup._pinnedGrip:Hide()
+  end
+  if popup._pinnedDragTicker then
+    popup._pinnedDragTicker:SetScript("OnUpdate", nil)
+  end
+  if popup._pinnedFadeGroup and popup._pinnedFadeGroup:IsPlaying() then
+    popup._pinnedFadeGroup:Stop()
+  end
+  popup:SetAlpha(1)
+  popup._pinnedSetup = nil
 end
 
 ---------------------------------------------------------------------------

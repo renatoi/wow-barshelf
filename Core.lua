@@ -1,6 +1,7 @@
 Barshelf = LibStub("AceAddon-3.0"):NewAddon("Barshelf", "AceConsole-3.0", "AceEvent-3.0")
+local L = Barshelf_L
 
-Barshelf.version = "1.1.0"
+Barshelf.version = "1.2.0"
 Barshelf.docks = {} -- dockID -> dock frame
 Barshelf.shelves = {} -- ordered list of active shelf objects
 Barshelf.combatQueue = {}
@@ -40,6 +41,8 @@ local defaults = {
     handleBgAlpha = 0.85,
     handleIconSize = 16,
     handleFontSize = 12,
+    defaultPopupAnchor = "AUTO",
+    defaultDisplayMode = "both",
     barRowOrder = "auto",
     barIconSize = nil,
     barIconPadding = nil,
@@ -54,21 +57,59 @@ local defaults = {
 }
 
 ---------------------------------------------------------------------------
--- SavedVariable migration (pre-AceDB -> AceDB)
+-- SavedVariable migration
+-- v1.0-v1.1 used SavedVariablesPerCharacter: BarshelfDB
+-- v1.2+ uses SavedVariables: BarshelfGlobalDB (account-wide for AceDB profiles)
+-- The .toc still declares BarshelfDB as PerCharacter so WoW loads the old file.
 ---------------------------------------------------------------------------
 function Barshelf:MigrateOldDB()
-  if not BarshelfDB then
+  -- Nothing to migrate
+  if not BarshelfDB or not next(BarshelfDB) then
     return
   end
-  if BarshelfDB.profiles then
+  -- Already migrated on a previous login
+  if BarshelfDB._migrated then
     return
-  end -- already AceDB
-  local old = BarshelfDB
+  end
+
   local charKey = UnitName("player") .. " - " .. GetRealmName()
-  BarshelfDB = {
-    profileKeys = { [charKey] = charKey },
-    profiles = { [charKey] = old },
-  }
+
+  -- Normalize: pre-AceDB flat table → AceDB format
+  local src = BarshelfDB
+  if not src.profiles then
+    src = {
+      profileKeys = { [charKey] = charKey },
+      profiles = { [charKey] = src },
+    }
+  end
+
+  -- Copy into account-wide DB
+  if not BarshelfGlobalDB then
+    BarshelfGlobalDB = {}
+  end
+  if not BarshelfGlobalDB.profiles then
+    BarshelfGlobalDB.profiles = {}
+  end
+  if not BarshelfGlobalDB.profileKeys then
+    BarshelfGlobalDB.profileKeys = {}
+  end
+
+  -- Find this character's profile data from the old DB
+  local oldProfileName = src.profileKeys[charKey]
+  local profileData = oldProfileName and src.profiles[oldProfileName]
+
+  if profileData then
+    -- Always store under the character's own name (not "Default")
+    -- so each character gets an independent copy after migration
+    if not BarshelfGlobalDB.profiles[charKey] or not next(BarshelfGlobalDB.profiles[charKey]) then
+      BarshelfGlobalDB.profiles[charKey] = profileData
+    end
+    BarshelfGlobalDB.profileKeys[charKey] = charKey
+  end
+
+  -- Mark migrated (don't wipe — keeps data as fallback)
+  BarshelfDB._migrated = true
+  self:Print(L["Migrated shelves for %s."]:format(charKey))
 end
 
 ---------------------------------------------------------------------------
@@ -99,7 +140,7 @@ function Barshelf:CloseAllPopups()
   end
   self._closingPopups = true
   for _, shelf in ipairs(self.shelves) do
-    if shelf.popup and shelf.popup:IsShown() then
+    if shelf.popup and shelf.popup:IsShown() and not shelf.config.pinned then
       shelf.popup:Hide()
     end
   end
@@ -114,7 +155,7 @@ end
 
 function Barshelf:AnyPopupShown()
   for _, shelf in ipairs(self.shelves) do
-    if shelf.popup and shelf.popup:IsShown() then
+    if shelf.popup and shelf.popup:IsShown() and not shelf.config.pinned then
       return true
     end
   end
@@ -123,7 +164,7 @@ end
 
 function Barshelf:AnyDockPopupShown(dockID)
   for _, shelf in ipairs(self.shelves) do
-    if (shelf.config.dockID or 1) == dockID and shelf.popup and shelf.popup:IsShown() then
+    if (shelf.config.dockID or 1) == dockID and shelf.popup and shelf.popup:IsShown() and not shelf.config.pinned then
       return true
     end
   end
@@ -146,7 +187,7 @@ function Barshelf:UpdateAllSecureRefs()
     if shelf.handle then
       local count = 0
       for _, other in ipairs(allShelves) do
-        if other ~= shelf and other.popup then
+        if other ~= shelf and other.popup and not other.config.pinned then
           count = count + 1
           shelf.handle:SetFrameRef("otherpopup" .. count, other.popup)
         end
@@ -201,6 +242,12 @@ function Barshelf:CreateShelf(config, index)
     shelf = self:CreateBarShelf(config, index)
   elseif config.type == "custom" then
     shelf = self:CreateCustomShelf(config, index)
+  elseif config.type == "micro" then
+    shelf = self:CreateMicroShelf(config, index)
+  elseif config.type == "bags" then
+    shelf = self:CreateBagShelf(config, index)
+  elseif config.type == "status" then
+    shelf = self:CreateStatusShelf(config, index)
   end
   if not shelf then
     return
@@ -235,6 +282,32 @@ function Barshelf:RebuildAll()
     end
   end
   self:UpdateAllSecureRefs()
+  self:ShowPinnedPopups()
+end
+
+---------------------------------------------------------------------------
+-- Show pinned popups at their saved positions
+---------------------------------------------------------------------------
+function Barshelf:ShowPinnedPopups()
+  if InCombatLockdown() then
+    self:QueueForCombat(function()
+      self:ShowPinnedPopups()
+    end)
+    return
+  end
+  for _, shelf in ipairs(self.shelves) do
+    if shelf.config.pinned and shelf.popup then
+      shelf.popup:ClearAllPoints()
+      local pt = shelf.config.pinnedPoint
+      if pt then
+        shelf.popup:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
+      else
+        self:UpdatePopupAnchor(shelf.popup)
+      end
+      shelf.popup:Show()
+      self:SetupPopupPinning(shelf)
+    end
+  end
 end
 
 function Barshelf:TeardownAll()
@@ -249,11 +322,21 @@ function Barshelf:TeardownAll()
       self:DeactivateBarShelf(shelf)
     elseif shelf.type == "custom" then
       self:DeactivateCustomShelf(shelf)
+    elseif shelf.type == "micro" then
+      self:DeactivateMicroShelf(shelf)
+    elseif shelf.type == "bags" then
+      self:DeactivateBagShelf(shelf)
+    elseif shelf.type == "status" then
+      self:DeactivateStatusShelf(shelf)
     end
     if shelf.handle then
       shelf.handle:Hide()
     end
     if shelf.popup then
+      if shelf.popup._pinnedFadeTimer then
+        shelf.popup._pinnedFadeTimer:Cancel()
+        shelf.popup._pinnedFadeTimer = nil
+      end
       shelf.popup:Hide()
     end
   end
@@ -270,7 +353,7 @@ end
 function Barshelf:AddBarShelf(barID, dockID)
   for _, cfg in ipairs(self.db.profile.shelves) do
     if cfg.type == "bar" and cfg.barID == barID and cfg.enabled then
-      self:Print("Bar " .. barID .. " is already on a shelf.")
+      self:Print(L["Bar %d is already on a shelf."]:format(barID))
       return nil
     end
   end
@@ -387,6 +470,78 @@ function Barshelf:AddCustomShelf(label, dockID)
   return cfg
 end
 
+function Barshelf:AddMicroShelf(dockID)
+  for _, cfg in ipairs(self.db.profile.shelves) do
+    if cfg.type == "micro" and cfg.enabled then
+      self:Print(L["Micro menu shelf already exists."])
+      return nil
+    end
+  end
+  local cfg = {
+    type = "micro",
+    dockID = dockID or 1,
+    enabled = true,
+    label = "Micro Menu",
+    displayMode = "both",
+    iconSize = self.db.profile.handleIconSize or 16,
+    labelFontSize = self.db.profile.handleFontSize or 12,
+    numRows = 1,
+    buttonPadding = 0,
+    popupAnchor = "AUTO",
+  }
+  table.insert(self.db.profile.shelves, cfg)
+  self:RebuildAll()
+  return cfg
+end
+
+function Barshelf:AddBagShelf(dockID)
+  for _, cfg in ipairs(self.db.profile.shelves) do
+    if cfg.type == "bags" and cfg.enabled then
+      self:Print(L["Bags shelf already exists."])
+      return nil
+    end
+  end
+  local cfg = {
+    type = "bags",
+    dockID = dockID or 1,
+    enabled = true,
+    label = "$used/$total",
+    displayMode = "both",
+    iconSize = self.db.profile.handleIconSize or 16,
+    labelFontSize = self.db.profile.handleFontSize or 12,
+    numRows = 1,
+    buttonPadding = 0,
+    popupAnchor = "AUTO",
+  }
+  table.insert(self.db.profile.shelves, cfg)
+  self:RebuildAll()
+  return cfg
+end
+
+function Barshelf:AddStatusShelf(dockID)
+  for _, cfg in ipairs(self.db.profile.shelves) do
+    if cfg.type == "status" and cfg.enabled then
+      self:Print(L["Status shelf already exists."])
+      return nil
+    end
+  end
+  local cfg = {
+    type = "status",
+    dockID = dockID or 1,
+    enabled = true,
+    label = "Lv$level $xp%",
+    displayMode = "both",
+    iconSize = self.db.profile.handleIconSize or 16,
+    labelFontSize = self.db.profile.handleFontSize or 12,
+    showXP = true,
+    showRep = true,
+    popupAnchor = "AUTO",
+  }
+  table.insert(self.db.profile.shelves, cfg)
+  self:RebuildAll()
+  return cfg
+end
+
 function Barshelf:RemoveShelf(index)
   if not self.db.profile.shelves[index] then
     return
@@ -406,7 +561,7 @@ end
 
 function Barshelf:RemoveDock(dockID)
   if dockID == 1 then
-    self:Print("Cannot remove the default dock.")
+    self:Print(L["Cannot remove the default dock."])
     return
   end
   for _, cfg in ipairs(self.db.profile.shelves) do
@@ -435,7 +590,7 @@ end
 ---------------------------------------------------------------------------
 function Barshelf:OnInitialize()
   self:MigrateOldDB()
-  self.db = LibStub("AceDB-3.0"):New("BarshelfDB", defaults, true)
+  self.db = LibStub("AceDB-3.0"):New("BarshelfGlobalDB", defaults, true)
 
   -- Ensure critical tables exist (profile copy/reset may not create them)
   local p = self.db.profile
@@ -473,7 +628,7 @@ function Barshelf:OnInitialize()
     self:SetupOptions()
   end
 
-  self:Print("Loaded. Type /bs to open settings.")
+  self:Print(L["Loaded. Type /bs to open settings."])
 end
 
 function Barshelf:OnEnable()
@@ -489,6 +644,7 @@ function Barshelf:OnEnable()
   end
 
   self:UpdateAllSecureRefs()
+  self:ShowPinnedPopups()
   self:SetupMinimapIcon()
 
   self:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -518,25 +674,53 @@ function Barshelf:PLAYER_REGEN_ENABLED()
 end
 
 function Barshelf:OnEditModeEnter()
-  -- Temporarily restore original Blizzard bars so Edit Mode can configure them
-  for _, shelf in ipairs(self.shelves) do
-    if shelf.type == "bar" and shelf.hiddenBarFrame then
-      UnregisterStateDriver(shelf.hiddenBarFrame, "visibility")
-      shelf.hiddenBarFrame:Show()
+  -- Defer: Edit Mode opens via a protected panel manager call chain;
+  -- UnregisterStateDriver/SetAttribute would be blocked if called inline.
+  C_Timer.After(0, function()
+    if InCombatLockdown() then
+      return
     end
-  end
+    for _, shelf in ipairs(self.shelves) do
+      if shelf.type == "bar" and shelf.hiddenBarFrame then
+        UnregisterStateDriver(shelf.hiddenBarFrame, "visibility")
+        shelf.hiddenBarFrame:Show()
+      end
+      if shelf.type == "micro" and shelf.hiddenMicroContainer then
+        UnregisterStateDriver(shelf.hiddenMicroContainer, "visibility")
+        shelf.hiddenMicroContainer:Show()
+      end
+      if shelf.type == "bags" and shelf.hiddenBagContainer then
+        UnregisterStateDriver(shelf.hiddenBagContainer, "visibility")
+        shelf.hiddenBagContainer:Show()
+      end
+      if shelf.type == "status" and shelf.hiddenStatusContainer then
+        pcall(function()
+          shelf.hiddenStatusContainer:Show()
+        end)
+      end
+      -- Hide pinned popups (their buttons are returned to Blizzard)
+      if shelf.config.pinned and shelf.popup then
+        shelf.popup:Hide()
+      end
+    end
+  end)
 end
 
 function Barshelf:OnEditModeExit()
-  -- Re-hide Blizzard bars that our shelves replace
-  for _, shelf in ipairs(self.shelves) do
-    if shelf.type == "bar" and shelf.hiddenBarFrame then
-      shelf.hiddenBarFrame:Hide()
-      RegisterStateDriver(shelf.hiddenBarFrame, "visibility", "hide")
+  -- Defer for same reason as OnEditModeEnter
+  C_Timer.After(0, function()
+    if InCombatLockdown() then
+      return
     end
-  end
-  -- Rebuild to pick up any Edit Mode changes (icon count, size, etc.)
-  self:RebuildAll()
+    for _, shelf in ipairs(self.shelves) do
+      if shelf.type == "bar" and shelf.hiddenBarFrame then
+        shelf.hiddenBarFrame:Hide()
+        RegisterStateDriver(shelf.hiddenBarFrame, "visibility", "hide")
+      end
+    end
+    -- Rebuild to pick up any Edit Mode changes (icon count, size, etc.)
+    self:RebuildAll()
+  end)
 end
 
 ---------------------------------------------------------------------------
@@ -546,10 +730,10 @@ function Barshelf:ChatCommand(msg)
   msg = strtrim(msg):lower()
   if msg == "reset" then
     self:ResetAllDockPositions()
-    self:Print("Dock positions reset.")
+    self:Print(L["Dock positions reset."])
   elseif msg == "rebuild" then
     self:RebuildAll()
-    self:Print("Rebuilt.")
+    self:Print(L["Rebuilt."])
   else
     self:ToggleConfig()
   end
@@ -560,7 +744,7 @@ end
 ---------------------------------------------------------------------------
 function Barshelf:ToggleConfig()
   if InCombatLockdown() then
-    self:Print("Cannot open settings in combat.")
+    self:Print(L["Cannot open settings in combat."])
     return
   end
   if self.openOptions then

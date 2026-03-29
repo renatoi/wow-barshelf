@@ -1,4 +1,5 @@
 local Barshelf = LibStub("AceAddon-3.0"):GetAddon("Barshelf")
+local L = Barshelf_L
 
 ---------------------------------------------------------------------------
 -- Dock mixin
@@ -51,7 +52,13 @@ end
 function DockMixin:UpdateMouseoverAlpha()
   local idleAlpha = Barshelf.db.profile.dockIdleAlpha
   if idleAlpha == nil then
-    idleAlpha = 1.0
+    -- Legacy fallback: v1.1 used dockMouseoverHide (boolean)
+    if Barshelf.db.profile.dockMouseoverHide then
+      idleAlpha = 0
+      Barshelf.db.profile.dockIdleAlpha = 0
+    else
+      idleAlpha = 1.0
+    end
   end
 
   -- Cancel pending poll
@@ -116,6 +123,16 @@ local HANDLE_CLICK_SNIPPET = [[
         if not popup then return end
         local isShown = popup:IsShown()
 
+        local isPinned = self:GetAttribute("pinned")
+        if isPinned then
+            if isShown then
+                popup:Hide()
+            else
+                popup:Show()
+            end
+            return
+        end
+
         local closeOthers = self:GetAttribute("closeOthers")
         if closeOthers and not isShown then
             local count = self:GetAttribute("otherpopupcount") or 0
@@ -175,12 +192,13 @@ function DockMixin:CreateHandle(shelf)
   -- Secure click handler (popup toggle)
   handle:SetFrameRef("popup", shelf.popup)
   handle:SetAttribute("_onclick", HANDLE_CLICK_SNIPPET)
+  handle:SetAttribute("pinned", shelf.config.pinned or false)
   handle:RegisterForClicks("AnyUp")
 
   -- Right-click opens settings for this shelf
   handle:HookScript("OnClick", function(_, mouseButton)
     if mouseButton == "RightButton" and not InCombatLockdown() then
-      Barshelf:openOptions("Shelves", shelf.index)
+      Barshelf:openOptions("Shelves & Docks", shelf.index)
     end
   end)
 
@@ -193,16 +211,30 @@ end
 ---------------------------------------------------------------------------
 function DockMixin:UpdateHandleDisplay(handle, shelf)
   local config = shelf.config
-  local mode = config.displayMode or "both"
-  local iconSz = config.iconSize or 16
-  local fontSize = config.labelFontSize or 12
+  -- Use per-shelf values only if overrideAppearance is set; otherwise use globals
+  local mode, iconSz, fontSize
+  if config.overrideAppearance then
+    mode = config.displayMode or "both"
+    iconSz = config.iconSize or 16
+    fontSize = config.labelFontSize or 12
+  else
+    mode = Barshelf.db.profile.defaultDisplayMode or "both"
+    iconSz = Barshelf.db.profile.handleIconSize or 16
+    fontSize = Barshelf.db.profile.handleFontSize or 12
+  end
   local pad = 4
 
   handle.icon:SetSize(iconSz, iconSz)
 
   local fontPath = handle.label:GetFont() or "Fonts\\FRIZQT__.TTF"
   handle.label:SetFont(fontPath, fontSize, "OUTLINE")
-  handle.label:SetText(config.label or "Shelf")
+  local labelText = config.label or "Shelf"
+  if config.type == "status" then
+    labelText = Barshelf:FormatStatusLabel(labelText)
+  elseif config.type == "bags" then
+    labelText = Barshelf:FormatBagLabel(labelText)
+  end
+  handle.label:SetText(labelText)
 
   if mode == "icon" then
     handle.icon:Show()
@@ -232,6 +264,11 @@ function DockMixin:UpdateHandleDisplay(handle, shelf)
 end
 
 function DockMixin:UpdateHandleIcon(handle, shelf)
+  if shelf.config.customIcon then
+    handle.icon:SetTexture(shelf.config.customIcon)
+    return
+  end
+
   local texture = "Interface\\Icons\\INV_Misc_QuestionMark"
 
   if shelf.config.type == "bar" then
@@ -264,6 +301,12 @@ function DockMixin:UpdateHandleIcon(handle, shelf)
         end
       end
     end
+  elseif shelf.config.type == "micro" then
+    texture = "Interface\\Icons\\INV_Gizmo_GoblinTonkController"
+  elseif shelf.config.type == "bags" then
+    texture = "Interface\\Icons\\INV_Misc_Bag_08"
+  elseif shelf.config.type == "status" then
+    texture = "Interface\\Icons\\Achievement_Level_80"
   end
 
   handle.icon:SetTexture(texture)
@@ -382,7 +425,7 @@ function Barshelf:CreateDock(config)
     if InCombatLockdown() or dock._isDragging then
       return
     end
-    dock:SetAlpha(1)
+    dock:FadeTo(1)
     local scale = dock:GetEffectiveScale()
     local cx, cy = GetCursorPosition()
     dock._dragOffsetX = cx / scale - (dock:GetLeft() or 0)
@@ -427,7 +470,7 @@ function Barshelf:CreateDock(config)
   end)
   grip:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("Drag to move", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(L["Drag to move"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
   end)
   grip:SetScript("OnLeave", function()
