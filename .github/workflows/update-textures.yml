@@ -1,0 +1,43 @@
+name: Update Texture Names
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'  # Monthly, 1st day at 06:00 UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run update script
+        run: bash scripts/update-texture-names.sh
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet TextureNames.lua; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LINES=$(wc -l < TextureNames.lua)
+          BRANCH="auto/update-texture-names"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add TextureNames.lua
+          git commit -m "Update TextureNames.lua ($LINES lines)"
+          git push -f origin "$BRANCH"
+          gh pr create \
+            --title "Update TextureNames.lua from Townlong Yak" \
+            --body "Auto-generated from the latest ArtTextureID.lua. $LINES icon name entries." \
+            --base main \
+            --head "$BRANCH" || true
