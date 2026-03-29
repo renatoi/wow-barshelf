@@ -127,6 +127,19 @@ function Barshelf:CreatePopup(shelf)
       popup._pinnedFadeTimer = nil
     end
 
+    -- Pinned popups: re-show at idle alpha (handle click hides via secure handler,
+    -- but pinned popups should always stay on screen at their idle opacity)
+    if isPinned and not Barshelf._tearingDown then
+      C_Timer.After(0, function()
+        if not InCombatLockdown() and popup.shelf and popup.shelf.config.pinned then
+          popup:Show()
+          if popup.UpdatePinnedAlpha then
+            popup:UpdatePinnedAlpha()
+          end
+        end
+      end)
+    end
+
     if not isPinned then
       local dockID = popup.shelf and popup.shelf.config.dockID or 1
       local dock = Barshelf.docks[dockID]
@@ -383,21 +396,26 @@ function Barshelf:SetupPopupPinning(shelf)
       self._pinnedFadeTimer:Cancel()
       self._pinnedFadeTimer = nil
     end
-    if idleAlpha >= 1.0 then
+
+    if self._isDragging or idleAlpha >= 1.0 then
       self:PinnedFadeTo(1)
       return
     end
-    if self._isDragging then
+
+    local handleOver = shelf.handle and shelf.handle:IsMouseOver()
+    if self._pinnedRevealed or self:IsMouseOver() or handleOver then
+      -- Active: full opacity, poll until mouse leaves both popup and handle
       self:PinnedFadeTo(1)
-      return
-    end
-    if self:IsMouseOver() then
-      self:PinnedFadeTo(1)
-      self._pinnedFadeTimer = C_Timer.NewTimer(0.2, function()
+      self._pinnedFadeTimer = C_Timer.NewTimer(0.3, function()
         self._pinnedFadeTimer = nil
+        local stillOver = self:IsMouseOver() or (shelf.handle and shelf.handle:IsMouseOver())
+        if not stillOver then
+          self._pinnedRevealed = false
+        end
         self:UpdatePinnedAlpha()
       end)
     else
+      -- Idle: alpha 0 is fine — EnableMouse(true) still receives mouse events
       self:PinnedFadeTo(idleAlpha)
     end
   end

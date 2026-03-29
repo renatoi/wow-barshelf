@@ -1,3 +1,73 @@
+## v1.2.0
+
+### New Shelf Types
+- **Bags shelf**: Click handle to toggle all bags open/closed. Handle displays used/total bag space using template keywords (`$used/$total`). No popup — pure handle convenience.
+- **Status shelf**: Custom XP and reputation progress bars in a popup. Purple XP bar with level/percentage, green reputation bar with faction/standing. Handle shows compact template text (e.g., `Lv$level $xp%`). Hides Blizzard's status tracking bars.
+- **Micro menu shelf**: Reparent Blizzard's micro menu buttons into a shelf popup. Auto-detects available buttons, native sizing, configurable rows.
+- **Multi-faction tracking**: Track multiple reputations beyond Blizzard's watched faction. Hierarchical faction picker organized by expansion with search. Each tracked faction gets its own colored bar in the status popup.
+
+### Pinned Popups
+- Pin any shelf as an always-visible bar via the "Pin as bar" checkbox.
+- Drag pinned popups anywhere on screen via the grip handle at the top.
+- Per-shelf idle opacity with mouseover reveal (reuses dock fade pattern).
+- Handle click toggles pinned popup visibility without unpinning.
+- Pinned popups survive ESC, backdrop clicks, and close-others.
+- Hidden during Edit Mode, restored after.
+
+### Icon Picker
+- Click the shelf icon preview to browse all WoW icons in a scrollable grid.
+- 32K+ icon name database (auto-updated monthly from Townlong Yak via CI).
+- Search by icon filename, spell name (from spellbook), or FileDataID.
+- FauxScrollFrame virtual scrolling — only visible buttons exist in memory.
+- Drag spell/item/macro onto the icon preview as an alternative.
+- Right-click the icon preview to reset to auto-detect.
+
+### Options Panel Overhaul
+- **Unified "Shelves & Docks" panel**: Tree view shows docks as headers with shelves grouped underneath. Click a dock to configure its name, orientation, and appearance.
+- **Simplified add buttons**: Two buttons ("+ Add Dock", "+ Add Shelf") with a type picker dropdown replacing 6 separate buttons.
+- **Override Appearance**: Per-shelf checkbox to customize Open Direction, Handle Style, and handle sizing. Unchecked = inherits from global Appearance tab. Existing per-shelf customizations auto-detected and preserved.
+- **Shelf Defaults in Appearance tab**: Global defaults for Open Direction and Handle Style.
+- **Template label system**: Status and Bags shelves support `$keyword` placeholders in handle labels (`$level`, `$xp`, `$used`, `$total`, etc.).
+- **Defaults button**: Resets shelf/dock settings with confirmation dialog.
+- **Proper arrow buttons**: Blizzard scroll arrow templates for move up/down with tooltips.
+- **Detail panel layout**: Title, controls row (Enabled/Move/Delete/Defaults), Pinning, then Layout & Sizing.
+
+### Profiles & Migration
+- Account-wide AceDB profiles via `BarshelfGlobalDB` with cross-character sharing.
+- Automatic per-character → account-wide migration on first login per character.
+- Each character's data migrates under its own profile name (no shared "Default").
+- Old data preserved as fallback (marked `_migrated`, not wiped).
+- Legacy `dockMouseoverHide` boolean auto-converted to `dockIdleAlpha` at runtime.
+- Migration test suite with 21 assertions across 7 scenarios, runs in CI.
+
+### Localization
+- Full translations: German, French, Spanish, Brazilian Portuguese.
+- Partial translations: Italian, Russian, Korean, Simplified/Traditional Chinese.
+- Localized .toc Notes for all supported locales.
+- All UI strings use the `L[]` localization system with metatable fallback.
+
+### Bug Fixes
+- **Custom shelf buttons not casting**: Removed `ActionButtonTemplate` interference with secure action attributes.
+- **Custom shelf icon/slot misalignment**: Icons fill the full button area.
+- **Drag-and-drop onto custom shelves**: Click-based drop handling as fallback.
+- **Bar shelf tiny icons**: Safety floor for button size reads (< 10px → 36px fallback).
+- **Shift+click no longer casts**: Secure handler bypassed via `shift-type1`/`shift-type2` attributes.
+- **Edit Mode ADDON_ACTION_BLOCKED**: Deferred handlers with `C_Timer.After(0)`.
+- **Dock invisible during drag**: `FadeTo(1)` properly stops running fade animation.
+- **Grid blinking on mouseover**: Bar shelf watchdog throttled to 1 check/second.
+- **Combat safety**: Popup anchor/stacking, SetFrameLevel, and bags Hide all guarded with `InCombatLockdown()`.
+- **Popup z-ordering**: Most recently shown popup renders on top (20-level gap clears child frames).
+- **Icon size mismatch**: Slider default matches native TWW button size (45px for bars).
+
+### Infrastructure
+- Custom addon logo (`assets/logo.tga`) for addon list and minimap icon.
+- `TextureNames.lua`: 32K+ icon FileDataID → name mappings from Townlong Yak.
+- `scripts/update-texture-names.sh`: Downloads and regenerates texture names.
+- Monthly CI job auto-updates `TextureNames.lua` and opens a PR if data changed.
+- Migration test suite in CI (`tests/test_migration.lua`).
+
+---
+
 ## v1.1.0
 
 ### New Features

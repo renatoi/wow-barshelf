@@ -195,14 +195,30 @@ function DockMixin:CreateHandle(shelf)
   handle:SetAttribute("pinned", shelf.config.pinned or false)
   handle:RegisterForClicks("AnyUp")
 
-  -- Right-click opens settings for this shelf
+  -- Right-click opens settings; left-click toggles pinned popup reveal
   handle:HookScript("OnClick", function(_, mouseButton)
-    if mouseButton == "RightButton" and not InCombatLockdown() then
+    if mouseButton == "LeftButton" and shelf.config.pinned and shelf.popup then
+      if shelf.popup._pinnedRevealed then
+        -- Already revealed: dismiss back to idle immediately
+        shelf.popup._pinnedRevealed = false
+      else
+        -- Reveal: show at full opacity (auto-fades when mouse leaves)
+        shelf.popup._pinnedRevealed = true
+      end
+      if shelf.popup.UpdatePinnedAlpha then
+        shelf.popup:UpdatePinnedAlpha()
+      end
+    elseif mouseButton == "RightButton" and not InCombatLockdown() then
       Barshelf:openOptions("Shelves & Docks", shelf.index)
     end
   end)
 
   shelf.handle = handle
+
+  -- Pre-anchor popup to handle (so it has a valid position if first opened in combat)
+  if shelf.popup and not shelf.config.pinned then
+    Barshelf:UpdatePopupAnchor(shelf.popup)
+  end
   self:UpdateHandleDisplay(handle, shelf)
 end
 
@@ -316,6 +332,13 @@ end
 -- Arrange handles inside dock
 ---------------------------------------------------------------------------
 function DockMixin:LayoutHandles()
+  if InCombatLockdown() then
+    Barshelf:QueueForCombat(function()
+      self:LayoutHandles()
+    end)
+    return
+  end
+
   local isH = (self.config.orientation or "HORIZONTAL") == "HORIZONTAL"
   local spacing = 1
   local dockPad = Barshelf.db.profile.dockPadding or 4

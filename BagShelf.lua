@@ -97,9 +97,12 @@ function Barshelf:UpdateBagHandleLabel(shelf)
   local text = self:FormatBagLabel(template)
   shelf.handle.label:SetText(text)
 
-  local dock = self.docks[shelf.config.dockID or 1]
-  if dock then
-    dock:LayoutHandles()
+  -- Only re-layout handles if out of combat (LayoutHandles calls Show on secure frames)
+  if not InCombatLockdown() then
+    local dock = self.docks[shelf.config.dockID or 1]
+    if dock then
+      dock:LayoutHandles()
+    end
   end
 end
 
@@ -112,8 +115,10 @@ function Barshelf:HideBagContainer(shelf)
     local frame = _G[name]
     if frame and frame.Hide then
       shelf.hiddenBagContainer = frame
-      frame:Hide()
-      RegisterStateDriver(frame, "visibility", "hide")
+      pcall(function()
+        frame:Hide()
+        RegisterStateDriver(frame, "visibility", "hide")
+      end)
       return
     end
   end

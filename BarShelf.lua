@@ -92,14 +92,18 @@ function Barshelf:ActivateBarShelf(shelf)
     end)
   end)
 
-  -- Watchdog: Blizzard's update code may hide icons/hotkeys on mouseover.
-  -- Texture/FontString ops are safe in combat (not secure objects).
+  -- Watchdog: re-assert parenting if Blizzard moves buttons back.
+  -- Throttled to once per second to avoid fighting with Blizzard's
+  -- own button updates (which caused grid blinking on mouseover).
   local popup = shelf.popup
   local buttons = shelf.buttons
-  -- Watchdog: only fix button FRAME visibility and parenting.
-  -- Do NOT touch icon/hotkey/textures — Blizzard manages those correctly
-  -- (hiding icons on empty slots, showing them on filled ones).
-  popup:SetScript("OnUpdate", function()
+  local watchdogElapsed = 0
+  popup:SetScript("OnUpdate", function(_, dt)
+    watchdogElapsed = watchdogElapsed + dt
+    if watchdogElapsed < 1 then
+      return
+    end
+    watchdogElapsed = 0
     if InCombatLockdown() then
       return
     end

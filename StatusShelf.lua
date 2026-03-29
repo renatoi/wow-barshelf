@@ -203,6 +203,9 @@ end
 -- Layout the status popup based on visibility settings
 ---------------------------------------------------------------------------
 function Barshelf:LayoutStatusPopup(shelf)
+  if InCombatLockdown() then
+    return
+  end
   local config = shelf.config
   local popup = shelf.popup
   local xpBar = shelf.xpBar
@@ -299,6 +302,7 @@ function Barshelf:HideStatusBarContainer(shelf)
       shelf.hiddenStatusContainer = frame
       pcall(function()
         frame:Hide()
+        RegisterStateDriver(frame, "visibility", "hide")
       end)
       return
     end
@@ -425,9 +429,11 @@ function Barshelf:UpdateStatusData(shelf)
     local text = self:FormatStatusLabel(template)
     shelf.handle.label:SetText(text)
 
-    local dock = self.docks[config.dockID or 1]
-    if dock then
-      dock:LayoutHandles()
+    if not InCombatLockdown() then
+      local dock = self.docks[config.dockID or 1]
+      if dock then
+        dock:LayoutHandles()
+      end
     end
   end
 end
@@ -446,6 +452,7 @@ function Barshelf:DeactivateStatusShelf(shelf)
   -- Restore the original container
   if shelf.hiddenStatusContainer then
     pcall(function()
+      UnregisterStateDriver(shelf.hiddenStatusContainer, "visibility")
       shelf.hiddenStatusContainer:Show()
     end)
     shelf.hiddenStatusContainer = nil

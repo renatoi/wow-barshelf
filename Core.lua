@@ -151,11 +151,12 @@ function Barshelf:CloseAllPopups()
     self.escHelper:Hide()
   end
   self._closingPopups = false
+  self._popupZCounter = 10
 end
 
 function Barshelf:AnyPopupShown()
   for _, shelf in ipairs(self.shelves) do
-    if shelf.popup and shelf.popup:IsShown() and not shelf.config.pinned then
+    if shelf.popup and shelf.popup:IsShown() and not shelf.config.pinned and shelf.config.type ~= "bags" then
       return true
     end
   end
@@ -164,7 +165,13 @@ end
 
 function Barshelf:AnyDockPopupShown(dockID)
   for _, shelf in ipairs(self.shelves) do
-    if (shelf.config.dockID or 1) == dockID and shelf.popup and shelf.popup:IsShown() and not shelf.config.pinned then
+    if
+      (shelf.config.dockID or 1) == dockID
+      and shelf.popup
+      and shelf.popup:IsShown()
+      and not shelf.config.pinned
+      and shelf.config.type ~= "bags"
+    then
       return true
     end
   end
@@ -187,7 +194,7 @@ function Barshelf:UpdateAllSecureRefs()
     if shelf.handle then
       local count = 0
       for _, other in ipairs(allShelves) do
-        if other ~= shelf and other.popup and not other.config.pinned then
+        if other ~= shelf and other.popup and not other.config.pinned and other.config.type ~= "bags" then
           count = count + 1
           shelf.handle:SetFrameRef("otherpopup" .. count, other.popup)
         end
@@ -317,6 +324,7 @@ function Barshelf:TeardownAll()
     end)
     return
   end
+  self._tearingDown = true
   for _, shelf in ipairs(self.shelves) do
     if shelf.type == "bar" then
       self:DeactivateBarShelf(shelf)
@@ -345,6 +353,7 @@ function Barshelf:TeardownAll()
     dock:Hide()
   end
   wipe(self.docks)
+  self._tearingDown = false
 end
 
 ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 local Barshelf = LibStub("AceAddon-3.0"):GetAddon("Barshelf")
+local L = Barshelf_L
 
 ---------------------------------------------------------------------------
 -- Create a custom shelf (user-assigned spells / items / macros)
@@ -196,7 +197,7 @@ function Barshelf:HandleCustomDrop(shelf, slotIndex, button)
   elseif cursorType == "macro" then
     bc = { type = "macro", id = id }
   elseif cursorType == "petaction" then
-    print("|cff00ccffBarshelf:|r Pet actions are not supported.")
+    print("|cff00ccffBarshelf:|r " .. L["Pet actions are not supported."])
     return
   end
 
@@ -272,8 +273,8 @@ function Barshelf:ShowCustomButtonTooltip(button, shelf, slotIndex)
   local bc = shelf.config.buttons and shelf.config.buttons[slotIndex]
   GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
   if not bc then
-    GameTooltip:AddLine("Empty Slot", 0.5, 0.5, 0.5)
-    GameTooltip:AddLine("Drag a spell, item, or macro here", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(L["Empty Slot"], 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Drag a spell, item, or macro here"], 0.7, 0.7, 0.7)
   else
     if bc.type == "spell" and bc.id then
       local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(bc.id)
@@ -285,7 +286,7 @@ function Barshelf:ShowCustomButtonTooltip(button, shelf, slotIndex)
       local name = GetMacroInfo(bc.id)
       GameTooltip:AddLine(name or ("Macro #" .. bc.id), 1, 1, 1)
     end
-    GameTooltip:AddLine("Shift+click to pick up | Shift+Right-click to clear", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Shift+click to pick up | Shift+Right-click to clear"], 0.5, 0.5, 0.5)
   end
   GameTooltip:Show()
 end
