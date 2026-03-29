@@ -1,18 +1,34 @@
 ## Interface: 120001
 ## Title: Barshelf
 ## Notes: Access your hidden action bars through floating popup shelves
+## Notes-deDE: Greife auf deine versteckten Aktionsleisten über schwebende Popup-Regale zu
+## Notes-frFR: Accédez à vos barres d'action cachées via des étagères popup flottantes
+## Notes-esES: Accede a tus barras de acción ocultas a través de estantes emergentes flotantes
+## Notes-esMX: Accede a tus barras de acción ocultas a través de estantes emergentes flotantes
+## Notes-ptBR: Acesse suas barras de ação ocultas através de prateleiras popup flutuantes
+## Notes-itIT: Accedi alle tue barre delle azioni nascoste tramite scaffali popup flottanti
+## Notes-ruRU: Доступ к скрытым панелям действий через всплывающие полки
+## Notes-koKR: 떠다니는 팝업 선반을 통해 숨겨진 액션바에 접근
+## Notes-zhCN: 通过浮动弹出式书架访问隐藏的动作条
+## Notes-zhTW: 透過浮動彈出式書架存取隱藏的動作列
 ## Version: @project-version@
 ## Author: Barshelf Contributors
+## SavedVariables: BarshelfGlobalDB
 ## SavedVariablesPerCharacter: BarshelfDB
-## IconTexture: Interface\Icons\INV_Misc_Bag_07
+## IconTexture: Interface\AddOns\Barshelf\assets\logo
 ## X-Curse-Project-ID: 1495779
 ## X-Wago-ID: qGYZjRNg
 
 embeds.xml
 
+Locales.lua
+TextureNames.lua
 Core.lua
 Popup.lua
 Dock.lua
 BarShelf.lua
 CustomShelf.lua
+MicroShelf.lua
+BagShelf.lua
+StatusShelf.lua
 Options.lua

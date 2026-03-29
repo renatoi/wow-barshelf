@@ -21,8 +21,14 @@ jobs:
           chmod +x stylua
           sudo mv stylua /usr/local/bin/
 
+      - name: Install Lua
+        run: sudo apt-get install -y lua5.1
+
       - name: Run luacheck
-        run: luacheck Core.lua Options.lua Dock.lua Popup.lua BarShelf.lua CustomShelf.lua --no-color
+        run: luacheck Core.lua Options.lua Dock.lua Popup.lua BarShelf.lua CustomShelf.lua MicroShelf.lua --no-color
 
       - name: Check formatting
-        run: stylua --check Core.lua Options.lua Dock.lua Popup.lua BarShelf.lua CustomShelf.lua
+        run: stylua --check Core.lua Options.lua Dock.lua Popup.lua BarShelf.lua CustomShelf.lua MicroShelf.lua
+
+      - name: Run migration tests
+        run: lua5.1 tests/test_migration.lua
