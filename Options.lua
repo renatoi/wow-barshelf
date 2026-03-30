@@ -872,6 +872,19 @@ local function GetGeneralOptions()
           Barshelf:UpdateAllSecureRefs()
         end,
       },
+      clickOutsideToClose = {
+        order = 1.1,
+        type = "toggle",
+        name = L["Click outside to close popups"],
+        desc = L["Close all open shelves when clicking outside them. When off, shelves stay open until their handle is clicked again (useful for dragging spells to action bars)."],
+        width = "full",
+        get = function()
+          return Barshelf.db.profile.clickOutsideToClose
+        end,
+        set = function(_, v)
+          Barshelf.db.profile.clickOutsideToClose = v
+        end,
+      },
       stackPopups = {
         order = 1.5,
         type = "toggle",
@@ -891,6 +904,20 @@ local function GetGeneralOptions()
               Barshelf:LayoutDockPopups(dock)
             end
           end
+        end,
+      },
+      centerPopupsOnDock = {
+        order = 1.6,
+        type = "toggle",
+        name = L["Center popups on dock"],
+        desc = L["Center shelf popups horizontally on the dock instead of aligning them to their handle."],
+        width = "full",
+        get = function()
+          return Barshelf.db.profile.centerPopupsOnDock
+        end,
+        set = function(_, v)
+          Barshelf.db.profile.centerPopupsOnDock = v
+          DebouncedRebuild()
         end,
       },
       animatePopups = {

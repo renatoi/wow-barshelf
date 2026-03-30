@@ -67,7 +67,7 @@ function Barshelf:CreatePopup(shelf)
         alphaAnim:SetDuration(Barshelf.db.profile.animationDuration or 0.15)
         fadeIn:Play()
       end
-      if Barshelf.backdrop then
+      if Barshelf.db.profile.clickOutsideToClose and Barshelf.backdrop then
         Barshelf.backdrop:Show()
       end
       if Barshelf.escHelper then
@@ -184,11 +184,20 @@ function Barshelf:UpdatePopupAnchor(popup)
     anchor = Barshelf.db.profile.defaultPopupAnchor or "AUTO"
   end
 
+  -- Determine anchor frame: dock (centered) or handle (legacy)
+  local anchorFrame = handle
+  if self.db.profile.centerPopupsOnDock then
+    local dockID = config.dockID or 1
+    local dock = self.docks[dockID]
+    if dock then
+      anchorFrame = dock
+    end
+  end
+
   if anchor == "AUTO" then
     local scale = handle:GetEffectiveScale()
     local _, hy = handle:GetCenter()
     hy = (hy or 0) * scale
-    local sh = GetScreenHeight() * UIParent:GetEffectiveScale()
 
     -- Estimate popup height
     local num = config.numButtons or 12
@@ -203,13 +212,13 @@ function Barshelf:UpdatePopupAnchor(popup)
   popup._resolvedAnchor = anchor
   popup:ClearAllPoints()
   if anchor == "BOTTOM" then
-    popup:SetPoint("TOP", handle, "BOTTOM", 0, -2)
+    popup:SetPoint("TOP", anchorFrame, "BOTTOM", 0, -2)
   elseif anchor == "TOP" then
-    popup:SetPoint("BOTTOM", handle, "TOP", 0, 2)
+    popup:SetPoint("BOTTOM", anchorFrame, "TOP", 0, 2)
   elseif anchor == "LEFT" then
-    popup:SetPoint("RIGHT", handle, "LEFT", -2, 0)
+    popup:SetPoint("RIGHT", anchorFrame, "LEFT", -2, 0)
   elseif anchor == "RIGHT" then
-    popup:SetPoint("LEFT", handle, "RIGHT", 2, 0)
+    popup:SetPoint("LEFT", anchorFrame, "RIGHT", 2, 0)
   end
 end
 
@@ -284,29 +293,45 @@ function Barshelf:SetupPopupPinning(shelf)
   popup:SetMovable(true)
 
   local grip = CreateFrame("Frame", nil, popup)
-  grip:SetHeight(12)
-  grip:SetPoint("TOPLEFT", popup, "TOPLEFT", 3, -3)
-  grip:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -3, -3)
+  grip:SetHeight(16)
+  -- Protrude above the popup as a visible tab (overlaps 2px with border)
+  grip:SetPoint("BOTTOMLEFT", popup, "TOPLEFT", 6, -2)
+  grip:SetPoint("BOTTOMRIGHT", popup, "TOPRIGHT", -6, -2)
+  grip:SetFrameLevel(popup:GetFrameLevel() + 5)
   grip:EnableMouse(true)
   grip:RegisterForDrag("LeftButton")
 
-  -- Grip dot pattern (same style as dock grip)
+  -- Grip background (matches popup style)
+  local gripBg = grip:CreateTexture(nil, "BACKGROUND")
+  gripBg:SetAllPoints()
+  gripBg:SetColorTexture(0.1, 0.1, 0.1, 0.9)
+
+  -- Grip dot pattern (4 cols x 2 rows for wider tab)
   for row = 0, 1 do
-    for col = 0, 2 do
+    for col = 0, 3 do
       local dot = grip:CreateTexture(nil, "ARTWORK")
       dot:SetSize(2, 2)
       dot:SetColorTexture(0.5, 0.5, 0.5, 0.7)
-      dot:SetPoint("CENTER", grip, "CENTER", (col - 1) * 4, (0.5 - row) * 4)
+      dot:SetPoint("CENTER", grip, "CENTER", (col - 1.5) * 4, (0.5 - row) * 4)
     end
   end
 
+  -- Start hidden; revealed on mouseover
+  grip:SetAlpha(0)
+
   grip:SetScript("OnEnter", function(self)
+    self:SetAlpha(1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:AddLine(L["Drag to move"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
   end)
-  grip:SetScript("OnLeave", function()
+  grip:SetScript("OnLeave", function(self)
     GameTooltip:Hide()
+    C_Timer.After(0.15, function()
+      if not popup:IsMouseOver() and not self:IsMouseOver() and not popup._isDragging then
+        self:SetAlpha(0)
+      end
+    end)
   end)
 
   local dragTicker = CreateFrame("Frame")
@@ -399,16 +424,29 @@ function Barshelf:SetupPopupPinning(shelf)
 
     if self._isDragging or idleAlpha >= 1.0 then
       self:PinnedFadeTo(1)
+      -- Grip visibility still depends on mouseover even when popup stays opaque
+      if self._pinnedGrip and not self._isDragging then
+        local over = self:IsMouseOver()
+          or (shelf.handle and shelf.handle:IsMouseOver())
+          or self._pinnedGrip:IsMouseOver()
+        self._pinnedGrip:SetAlpha(over and 1 or 0)
+      end
       return
     end
 
     local handleOver = shelf.handle and shelf.handle:IsMouseOver()
-    if self._pinnedRevealed or self:IsMouseOver() or handleOver then
-      -- Active: full opacity, poll until mouse leaves both popup and handle
+    local gripOver = self._pinnedGrip and self._pinnedGrip:IsMouseOver()
+    if self._pinnedRevealed or self:IsMouseOver() or handleOver or gripOver then
+      -- Active: full opacity, poll until mouse leaves popup, handle, and grip
       self:PinnedFadeTo(1)
+      if self._pinnedGrip then
+        self._pinnedGrip:SetAlpha(1)
+      end
       self._pinnedFadeTimer = C_Timer.NewTimer(0.3, function()
         self._pinnedFadeTimer = nil
-        local stillOver = self:IsMouseOver() or (shelf.handle and shelf.handle:IsMouseOver())
+        local stillOver = self:IsMouseOver()
+          or (shelf.handle and shelf.handle:IsMouseOver())
+          or (self._pinnedGrip and self._pinnedGrip:IsMouseOver())
         if not stillOver then
           self._pinnedRevealed = false
         end
@@ -417,16 +455,29 @@ function Barshelf:SetupPopupPinning(shelf)
     else
       -- Idle: alpha 0 is fine — EnableMouse(true) still receives mouse events
       self:PinnedFadeTo(idleAlpha)
+      if self._pinnedGrip then
+        self._pinnedGrip:SetAlpha(0)
+      end
     end
   end
 
-  -- Wire enter/leave for fade
+  -- Wire enter/leave for fade + grip visibility
   popup:HookScript("OnEnter", function(self)
+    if self._pinnedGrip then
+      self._pinnedGrip:SetAlpha(1)
+    end
     if self.UpdatePinnedAlpha and shelf.config.pinned then
       self:UpdatePinnedAlpha()
     end
   end)
   popup:HookScript("OnLeave", function(self)
+    if self._pinnedGrip then
+      C_Timer.After(0.15, function()
+        if not self:IsMouseOver() and not self._pinnedGrip:IsMouseOver() and not self._isDragging then
+          self._pinnedGrip:SetAlpha(0)
+        end
+      end)
+    end
     if self.UpdatePinnedAlpha and shelf.config.pinned then
       self:UpdatePinnedAlpha()
     end

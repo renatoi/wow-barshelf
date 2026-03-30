@@ -44,6 +44,12 @@ if locale == "deDE" then
   L["Close other popups when opening one"] = "Andere Popups beim Öffnen schließen"
   L["Automatically hide other open shelves when a new one is opened."] =
     "Andere offene Regale automatisch ausblenden, wenn ein neues geöffnet wird."
+  L["Click outside to close popups"] = "Außerhalb klicken um Popups zu schließen"
+  L["Close all open shelves when clicking outside them. When off, shelves stay open until their handle is clicked again (useful for dragging spells to action bars)."] =
+    "Alle offenen Regale schließen wenn außerhalb geklickt wird. Wenn deaktiviert, bleiben Regale offen bis ihr Griff erneut geklickt wird (nützlich zum Ziehen von Zaubern auf Aktionsleisten)."
+  L["Center popups on dock"] = "Popups auf Dock zentrieren"
+  L["Center shelf popups horizontally on the dock instead of aligning them to their handle."] =
+    "Regal-Popups horizontal auf dem Dock zentrieren statt am Griff auszurichten."
   L["Stack open popups"] = "Offene Popups stapeln"
   L["When multiple popups are open, stack them sequentially instead of overlapping. Only applies when 'Close other popups' is off."] =
     "Wenn mehrere Popups geöffnet sind, diese nacheinander stapeln statt zu überlappen. Gilt nur wenn 'Andere Popups schließen' deaktiviert ist."
@@ -144,6 +150,8 @@ elseif locale == "frFR" then
   L["General"] = "Général"
   L["Appearance"] = "Apparence"
   L["Close other popups when opening one"] = "Fermer les autres popups à l'ouverture"
+  L["Click outside to close popups"] = "Cliquer à l'extérieur pour fermer les popups"
+  L["Center popups on dock"] = "Centrer les popups sur le dock"
   L["Stack open popups"] = "Empiler les popups ouverts"
   L["Animate popups (fade in)"] = "Animer les popups (fondu)"
   L["Dock Idle Behavior"] = "Comportement du dock inactif"
@@ -222,6 +230,8 @@ elseif locale == "esES" or locale == "esMX" then
   L["General"] = "General"
   L["Appearance"] = "Apariencia"
   L["Close other popups when opening one"] = "Cerrar otros popups al abrir uno"
+  L["Click outside to close popups"] = "Clic afuera para cerrar popups"
+  L["Center popups on dock"] = "Centrar popups en el dock"
   L["Stack open popups"] = "Apilar popups abiertos"
   L["Animate popups (fade in)"] = "Animar popups (fundido)"
   L["Dock Idle Behavior"] = "Comportamiento del dock inactivo"
@@ -289,6 +299,8 @@ elseif locale == "ptBR" then
   L["General"] = "Geral"
   L["Appearance"] = "Aparência"
   L["Close other popups when opening one"] = "Fechar outros popups ao abrir um"
+  L["Click outside to close popups"] = "Clicar fora para fechar popups"
+  L["Center popups on dock"] = "Centralizar popups no dock"
   L["Stack open popups"] = "Empilhar popups abertos"
   L["Animate popups (fade in)"] = "Animar popups (transição)"
   L["Show minimap icon"] = "Mostrar ícone do minimapa"

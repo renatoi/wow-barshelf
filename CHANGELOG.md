@@ -1,3 +1,20 @@
+## v1.2.1
+
+### New Options
+- **Click outside to close popups**: Toggle in General settings. When disabled, shelf popups stay open until their handle is clicked again — useful for dragging spells from the spellbook onto action bar shelves without the shelf auto-closing.
+- **Center popups on dock**: Toggle in General settings. Centers shelf popups horizontally on the dock instead of aligning them to their individual handle. Both options are off by default (existing behavior preserved).
+
+### Improvements
+- **Pinned popup drag grip**: The grip is now a visible tab that protrudes above the popup frame (16px, with background and dot pattern). Hidden at idle and appears on mouseover for a cleaner look.
+- **Grip integrated with popup fade**: Hovering the grip keeps the pinned popup at full opacity; the grip shares the same enter/leave polling as the popup itself.
+
+### Bug Fixes
+- **Blizzard Action Bar 1 appearing over shelves**: Added an aggressive OnShow hook on hidden bar frames to immediately re-hide them when Blizzard's TWW action bar code tries to show them. Properly managed through activate/deactivate/Edit Mode cycles.
+- **Bags not opening in combat**: Removed unnecessary `InCombatLockdown()` guard from `ToggleAllBags()` call. Also set the bag handle's secure snippet to a no-op to prevent popup toggle side-effects during combat.
+- **Edit Mode exit redundancy**: Simplified `OnEditModeExit` to just call `RebuildAll()` instead of manually re-hiding bars then rebuilding (the rebuild already handles everything).
+
+---
+
 ## v1.2.0
 
 ### New Shelf Types

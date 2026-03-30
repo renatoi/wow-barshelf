@@ -127,6 +127,17 @@ function Barshelf:ActivateBarShelf(shelf)
       shelf.barFrameWasShown = barFrame:IsShown()
       barFrame:Hide()
       RegisterStateDriver(barFrame, "visibility", "hide")
+      -- Aggressively re-hide if Blizzard's code tries to show the bar frame
+      -- (TWW 12.0 action bar system can override state drivers in some cases)
+      barFrame._barshelfHidden = true
+      if not barFrame._barshelfHooked then
+        barFrame:HookScript("OnShow", function(frame)
+          if frame._barshelfHidden and not InCombatLockdown() then
+            frame:Hide()
+          end
+        end)
+        barFrame._barshelfHooked = true
+      end
     end
   end
 end
@@ -226,6 +237,7 @@ function Barshelf:DeactivateBarShelf(shelf)
   -- Restore the original Blizzard bar frame (always show it —
   -- if the shelf is being removed, the user wants the bar back)
   if shelf.hiddenBarFrame then
+    shelf.hiddenBarFrame._barshelfHidden = nil
     UnregisterStateDriver(shelf.hiddenBarFrame, "visibility")
     shelf.hiddenBarFrame:Show()
     shelf.hiddenBarFrame = nil

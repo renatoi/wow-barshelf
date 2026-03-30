@@ -74,10 +74,15 @@ function Barshelf:ActivateBagShelf(shelf)
 
   -- Deferred initial update (handle may not exist yet)
   C_Timer.After(0.1, function()
-    -- Wire the handle to toggle bags on left-click
     if shelf.handle then
+      -- Skip the popup toggle for bag handles (prevents closeOthers
+      -- interference and invisible popup state cycling during combat)
+      if not InCombatLockdown() then
+        shelf.handle:SetAttribute("_onclick", "return")
+      end
+      -- Wire the handle to toggle bags on left-click
       shelf.handle:HookScript("OnClick", function(_, mouseButton)
-        if mouseButton == "LeftButton" and not InCombatLockdown() then
+        if mouseButton == "LeftButton" then
           ToggleAllBags()
         end
       end)

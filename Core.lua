@@ -1,7 +1,7 @@
 Barshelf = LibStub("AceAddon-3.0"):NewAddon("Barshelf", "AceConsole-3.0", "AceEvent-3.0")
 local L = Barshelf_L
 
-Barshelf.version = "1.2.0"
+Barshelf.version = "1.2.1"
 Barshelf.docks = {} -- dockID -> dock frame
 Barshelf.shelves = {} -- ordered list of active shelf objects
 Barshelf.combatQueue = {}
@@ -27,6 +27,8 @@ Barshelf.BAR_INFO = {
 local defaults = {
   profile = {
     closeOthers = true,
+    clickOutsideToClose = true,
+    centerPopupsOnDock = false,
     showMinimap = true,
     animatePopups = true,
     animationDuration = 0.15,
@@ -691,6 +693,7 @@ function Barshelf:OnEditModeEnter()
     end
     for _, shelf in ipairs(self.shelves) do
       if shelf.type == "bar" and shelf.hiddenBarFrame then
+        shelf.hiddenBarFrame._barshelfHidden = nil
         UnregisterStateDriver(shelf.hiddenBarFrame, "visibility")
         shelf.hiddenBarFrame:Show()
       end
@@ -716,18 +719,13 @@ function Barshelf:OnEditModeEnter()
 end
 
 function Barshelf:OnEditModeExit()
-  -- Defer for same reason as OnEditModeEnter
+  -- Defer for same reason as OnEditModeEnter.
+  -- RebuildAll re-activates all shelves which re-hides bar frames
+  -- and sets _barshelfHidden, so no manual loop is needed here.
   C_Timer.After(0, function()
     if InCombatLockdown() then
       return
     end
-    for _, shelf in ipairs(self.shelves) do
-      if shelf.type == "bar" and shelf.hiddenBarFrame then
-        shelf.hiddenBarFrame:Hide()
-        RegisterStateDriver(shelf.hiddenBarFrame, "visibility", "hide")
-      end
-    end
-    -- Rebuild to pick up any Edit Mode changes (icon count, size, etc.)
     self:RebuildAll()
   end)
 end
