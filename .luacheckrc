@@ -99,6 +99,18 @@ read_globals = {
   "ToggleAllBags",
   "OpenAllBags",
   "CloseAllBags",
+  "C_MountJournal",
+  "C_PetJournal",
+  "ClearOverrideBindings",
+  "CooldownFrame_Clear",
+  "CooldownFrame_Set",
+  "GetInventoryItemCooldown",
+  "GetInventoryItemID",
+  "GetItemCooldown",
+  "GetItemSpell",
+  "IsAltKeyDown",
+  "IsControlKeyDown",
+  "SetOverrideBindingClick",
 }
 
 -- Addon globals

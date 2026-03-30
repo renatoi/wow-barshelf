@@ -310,6 +310,15 @@ function DockMixin:UpdateHandleIcon(handle, shelf)
           t = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(bc.id)
         elseif bc.type == "item" and bc.id then
           t = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(bc.id)
+        elseif bc.type == "macro" and bc.id then
+          local _, iconTex = GetMacroInfo(bc.id)
+          t = iconTex
+        elseif bc.type == "mount" and bc.id then
+          local _, _, icon = C_MountJournal.GetMountInfoByID(bc.id)
+          t = icon
+        elseif bc.type == "battlepet" and bc.id then
+          local _, _, _, _, _, _, _, _, petIcon = C_PetJournal.GetPetInfoByPetID(bc.id)
+          t = petIcon
         end
         if t then
           texture = t

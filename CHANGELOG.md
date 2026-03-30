@@ -1,3 +1,21 @@
+## v1.3.0
+
+### New Features
+- **Mount support on custom shelves**: Drag mounts from the Collections journal onto custom shelf buttons. Uses `/cast` macro for reliable summoning.
+- **Battle pet support on custom shelves**: Drag companion pets from the Pet Journal onto custom shelf buttons. Summons via `/summonpet`.
+- **Keybindings for custom shelves**: Assign key bindings to individual custom shelf slots via the per-shelf settings panel. Bindings work even when the popup is closed (via invisible proxy buttons). Keybind text shown on each button.
+
+### Improvements
+- **Cooldown display on custom shelves**: Proper dark "pizza" sweep overlay with countdown text, matching Blizzard's native action buttons. Uses `CooldownFrame_Set` for full 12.0.1 combat compatibility (secret values).
+- **GCD animation**: Global cooldown sweep now shows on all custom shelf buttons. Event-driven via `SPELL_UPDATE_COOLDOWN` / `ACTIONBAR_UPDATE_COOLDOWN` for instant response. Off-GCD abilities (defensives, some trinkets) correctly skip the sweep.
+- **Handle icon for mounts, macros, and battle pets**: Dock handle now picks up icons from all custom shelf action types, not just spells and items.
+
+### Bug Fixes
+- **Items not activating on click**: Fixed `SecureActionButtonTemplate` item attribute format — now uses `"item:ID"` string instead of raw numeric ID.
+- **Item cooldowns not displaying**: Fixed `C_Item.GetItemCooldown` return value unpacking — returns three separate values, not a table (unlike `C_Spell.GetSpellCooldown`). Added bag/equipment scan fallback with location caching for combat safety.
+
+---
+
 ## v1.2.1
 
 ### New Options

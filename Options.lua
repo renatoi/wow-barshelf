@@ -780,6 +780,90 @@ local function CreateDropdownButton(parent, x, y, labelText, options, selected, 
   return btn, y - 46
 end
 
+-- Modifier key names used by WoW's binding system
+local MODIFIER_KEYS = {
+  LSHIFT = true,
+  RSHIFT = true,
+  LCTRL = true,
+  RCTRL = true,
+  LALT = true,
+  RALT = true,
+}
+
+local function CreateKeybindButton(parent, x, y, slotIndex, currentKey, onChange)
+  local container = CreateFrame("Frame", nil, parent)
+  container:SetSize(220, 24)
+  container:SetPoint("TOPLEFT", x, y)
+
+  local lbl = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  lbl:SetPoint("LEFT", 0, 0)
+  lbl:SetText(L["Slot"] .. " " .. slotIndex .. ":")
+
+  local btn = CreateFrame("Button", nil, container, "UIPanelButtonTemplate")
+  btn:SetPoint("LEFT", lbl, "RIGHT", 6, 0)
+  btn:SetSize(110, 22)
+  btn:SetText(currentKey or L["Click to bind"])
+  btn.listening = false
+
+  btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  btn:SetScript("OnClick", function(self, mouseButton)
+    if mouseButton == "RightButton" then
+      self:SetText(L["Click to bind"])
+      self.listening = false
+      self:EnableKeyboard(false)
+      onChange(nil)
+      return
+    end
+    if self.listening then
+      return
+    end
+    self.listening = true
+    self:SetText(L["Press a key..."])
+    self:EnableKeyboard(true)
+  end)
+
+  btn:SetScript("OnKeyDown", function(self, key)
+    if not self.listening then
+      return
+    end
+    -- Ignore bare modifier keys
+    if MODIFIER_KEYS[key] then
+      return
+    end
+    self:EnableKeyboard(false)
+    self.listening = false
+
+    if key == "ESCAPE" then
+      self:SetText(currentKey or L["Click to bind"])
+      return
+    end
+
+    -- Build modifier-prefixed key string
+    local mods = ""
+    if IsShiftKeyDown() then
+      mods = mods .. "SHIFT-"
+    end
+    if IsControlKeyDown() then
+      mods = mods .. "CTRL-"
+    end
+    if IsAltKeyDown() then
+      mods = mods .. "ALT-"
+    end
+    local fullKey = mods .. key
+
+    currentKey = fullKey
+    self:SetText(fullKey)
+    onChange(fullKey)
+  end)
+
+  btn:SetScript("OnHide", function(self)
+    self.listening = false
+    self:EnableKeyboard(false)
+  end)
+
+  return container, y - 26
+end
+
 ---------------------------------------------------------------------------
 -- Blizzard Settings panel registration
 ---------------------------------------------------------------------------
@@ -2202,6 +2286,24 @@ local function BuildShelvesAndDocksPanel(panel)
         cfg.buttonPadding = v
         DebouncedRebuild()
       end)
+    end
+
+    -- Keybindings section (custom shelves only)
+    if cfg.type == "custom" then
+      y = y - 6
+      local kbHdr = detailChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+      kbHdr:SetPoint("TOPLEFT", indent, y)
+      kbHdr:SetText(L["Keybindings"])
+      y = y - 18
+
+      cfg.keybinds = cfg.keybinds or {}
+      local num = cfg.numButtons or 6
+      for i = 1, num do
+        _, y = CreateKeybindButton(detailChild, indent, y, i, cfg.keybinds[i], function(key)
+          cfg.keybinds[i] = key
+          DebouncedRebuild()
+        end)
+      end
     end
 
     y = y - 6
