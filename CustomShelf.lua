@@ -475,35 +475,34 @@ function Barshelf:StartCooldownTimer(shelf)
   shelf.cooldownTimer = timer
 end
 
--- Shared DurationObject for cooldown display (reused to avoid allocations).
--- Populated with secret-safe SetTimeFromStart, then passed to the Cooldown
--- widget via SetCooldownFromDurationObject (both are C functions).
-local cooldownDuration = C_DurationUtil and C_DurationUtil.CreateDuration and C_DurationUtil.CreateDuration()
-
+-- Apply cooldown to a Cooldown widget from a SpellCooldownInfo table.
+-- Returns true if a cooldown was displayed, false otherwise.
+-- In 12.0.1, cooldown numeric values (startTime, duration) can be secret
+-- during combat. Addon code CANNOT pass secret values to any C function
+-- (SetCooldown, SetTimeFromStart, CooldownFrame_Set all reject them).
+-- We use issecretvalue() to detect this and gracefully degrade.
 local function ApplySpellCooldown(cd, spellID)
-  if C_Spell and C_Spell.GetSpellCooldown then
-    local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
-    if ok and info and info.isEnabled then
-      cooldownDuration:SetTimeFromStart(info.startTime, info.duration, info.modRate)
-      cd:SetCooldownFromDurationObject(cooldownDuration, true)
-      return true
-    end
+  if not (C_Spell and C_Spell.GetSpellCooldown) then
+    return false
   end
-  return false
+  local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
+  if not ok or not info or not info.isActive then
+    return false
+  end
+  -- isActive is true — there IS a cooldown. Check if values are secret.
+  if issecretvalue(info.startTime) then
+    return false -- combat secret — can't display from addon code
+  end
+  cd:SetCooldown(info.startTime, info.duration, info.modRate)
+  return true
 end
 
 function Barshelf:UpdateCustomCooldown(button, bc, gcdInfo)
-  -- 12.0.1 secret-safe cooldown pipeline:
-  --   1. DurationObject:SetTimeFromStart() — C function, accepts secrets
-  --   2. Cooldown:SetCooldownFromDurationObject() — C function, accepts secrets
-  -- Never compare secret numbers. Only branch on booleans (isEnabled).
-  -- clearIfZero=true auto-hides when no cooldown is active.
+  -- Branch on isActive (boolean, never secret) to decide show vs clear.
+  -- When isActive=true but values are secret (combat), gracefully skip
+  -- (12.0.1 limitation: addon code cannot pass secrets to display APIs).
+  -- When values are not secret (out of combat), display normally via SetCooldown.
   local cd = button.cooldown
-
-  if not cooldownDuration then
-    cd:Clear()
-    return
-  end
 
   if bc.type == "spell" and bc.id then
     if ApplySpellCooldown(cd, bc.id) then
@@ -512,9 +511,8 @@ function Barshelf:UpdateCustomCooldown(button, bc, gcdInfo)
   elseif bc.type == "item" and bc.id then
     if C_Item and C_Item.GetItemCooldown then
       local ok, st, dur, enable = pcall(C_Item.GetItemCooldown, bc.id)
-      if ok and st and enable then
-        cooldownDuration:SetTimeFromStart(st, dur)
-        cd:SetCooldownFromDurationObject(cooldownDuration, true)
+      if ok and st and enable and enable ~= 0 and not issecretvalue(st) then
+        cd:SetCooldown(st, dur)
         return
       end
     end
@@ -524,9 +522,8 @@ function Barshelf:UpdateCustomCooldown(button, bc, gcdInfo)
       return
     end
   elseif bc.type == "macro" or bc.type == "battlepet" then
-    if gcdInfo and gcdInfo.isEnabled then
-      cooldownDuration:SetTimeFromStart(gcdInfo.startTime, gcdInfo.duration, gcdInfo.modRate)
-      cd:SetCooldownFromDurationObject(cooldownDuration, true)
+    if gcdInfo and gcdInfo.isActive and not issecretvalue(gcdInfo.startTime) then
+      cd:SetCooldown(gcdInfo.startTime, gcdInfo.duration, gcdInfo.modRate)
       return
     end
   end

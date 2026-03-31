@@ -26,7 +26,7 @@ read_globals = {
   -- Core WoW
   "bit",
   "C_Container",
-  "C_DurationUtil",
+  "issecretvalue",
   "C_EditMode",
   "C_Item",
   "C_Reputation",
