@@ -475,61 +475,58 @@ function Barshelf:StartCooldownTimer(shelf)
   shelf.cooldownTimer = timer
 end
 
+-- Shared DurationObject for cooldown display (reused to avoid allocations).
+-- Populated with secret-safe SetTimeFromStart, then passed to the Cooldown
+-- widget via SetCooldownFromDurationObject (both are C functions).
+local cooldownDuration = C_DurationUtil and C_DurationUtil.CreateDuration and C_DurationUtil.CreateDuration()
+
+local function ApplySpellCooldown(cd, spellID)
+  if C_Spell and C_Spell.GetSpellCooldown then
+    local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
+    if ok and info and info.isEnabled then
+      cooldownDuration:SetTimeFromStart(info.startTime, info.duration, info.modRate)
+      cd:SetCooldownFromDurationObject(cooldownDuration, true)
+      return true
+    end
+  end
+  return false
+end
+
 function Barshelf:UpdateCustomCooldown(button, bc, gcdInfo)
-  -- Call cd:SetCooldown() directly — it's a C function (AllowedWhenTainted,
-  -- SecretArguments) that handles secret combat values natively.
-  -- CooldownFrame_Set is Lua code that inherits addon taint and fails on
-  -- secret comparisons like `start > 0`.
-  --
-  -- Branch only on isEnabled/enable (booleans, never secret).
-  -- SetCooldown(0, 0) auto-hides the widget, so we only need cd:Clear()
-  -- for the isEnabled=false case (cooldown on hold).
+  -- 12.0.1 secret-safe cooldown pipeline:
+  --   1. DurationObject:SetTimeFromStart() — C function, accepts secrets
+  --   2. Cooldown:SetCooldownFromDurationObject() — C function, accepts secrets
+  -- Never compare secret numbers. Only branch on booleans (isEnabled).
+  -- clearIfZero=true auto-hides when no cooldown is active.
   local cd = button.cooldown
 
+  if not cooldownDuration then
+    cd:Clear()
+    return
+  end
+
   if bc.type == "spell" and bc.id then
-    if C_Spell and C_Spell.GetSpellCooldown then
-      local ok, info = pcall(C_Spell.GetSpellCooldown, bc.id)
-      if ok and info then
-        if info.isEnabled then
-          cd:SetCooldown(info.startTime, info.duration, info.modRate)
-        else
-          cd:Clear()
-        end
-        return
-      end
+    if ApplySpellCooldown(cd, bc.id) then
+      return
     end
   elseif bc.type == "item" and bc.id then
     if C_Item and C_Item.GetItemCooldown then
       local ok, st, dur, enable = pcall(C_Item.GetItemCooldown, bc.id)
-      if ok and st then
-        if enable and enable ~= 0 then
-          cd:SetCooldown(st, dur)
-        else
-          cd:Clear()
-        end
+      if ok and st and enable then
+        cooldownDuration:SetTimeFromStart(st, dur)
+        cd:SetCooldownFromDurationObject(cooldownDuration, true)
         return
       end
     end
   elseif bc.type == "mount" and bc.id then
     local ok, _, spellID = pcall(C_MountJournal.GetMountInfoByID, bc.id)
-    if ok and spellID and C_Spell and C_Spell.GetSpellCooldown then
-      local ok2, info = pcall(C_Spell.GetSpellCooldown, spellID)
-      if ok2 and info then
-        if info.isEnabled then
-          cd:SetCooldown(info.startTime, info.duration, info.modRate)
-        else
-          cd:Clear()
-        end
-        return
-      end
+    if ok and spellID and ApplySpellCooldown(cd, spellID) then
+      return
     end
   elseif bc.type == "macro" or bc.type == "battlepet" then
-    if gcdInfo then
-      if gcdInfo.isEnabled then
-        cd:SetCooldown(gcdInfo.startTime, gcdInfo.duration, gcdInfo.modRate)
-      else
-        cd:Clear()
-      end
+    if gcdInfo and gcdInfo.isEnabled then
+      cooldownDuration:SetTimeFromStart(gcdInfo.startTime, gcdInfo.duration, gcdInfo.modRate)
+      cd:SetCooldownFromDurationObject(cooldownDuration, true)
       return
     end
   end
