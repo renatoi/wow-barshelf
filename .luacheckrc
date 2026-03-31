@@ -102,8 +102,6 @@ read_globals = {
   "C_MountJournal",
   "C_PetJournal",
   "ClearOverrideBindings",
-  "CooldownFrame_Clear",
-  "CooldownFrame_Set",
   "GetInventoryItemCooldown",
   "GetInventoryItemID",
   "GetItemCooldown",

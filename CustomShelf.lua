@@ -476,20 +476,25 @@ function Barshelf:StartCooldownTimer(shelf)
 end
 
 function Barshelf:UpdateCustomCooldown(button, bc, gcdInfo)
-  -- Use CooldownFrame_Set (Blizzard's trusted code) instead of SetCooldown
-  -- directly. CooldownFrame_Set can compare secret values internally —
-  -- addon code cannot. This matches how LibActionButton and Blizzard's
-  -- own ActionButton handle cooldowns in 12.0.1.
+  -- Call cd:SetCooldown() directly — it's a C function (AllowedWhenTainted,
+  -- SecretArguments) that handles secret combat values natively.
+  -- CooldownFrame_Set is Lua code that inherits addon taint and fails on
+  -- secret comparisons like `start > 0`.
   --
-  -- Spell/item/mount APIs already include GCD for on-GCD abilities.
-  -- Macro/battlepet types have no cooldown API — use spell 61304 (GCD ref).
+  -- Branch only on isEnabled/enable (booleans, never secret).
+  -- SetCooldown(0, 0) auto-hides the widget, so we only need cd:Clear()
+  -- for the isEnabled=false case (cooldown on hold).
   local cd = button.cooldown
 
   if bc.type == "spell" and bc.id then
     if C_Spell and C_Spell.GetSpellCooldown then
       local ok, info = pcall(C_Spell.GetSpellCooldown, bc.id)
       if ok and info then
-        CooldownFrame_Set(cd, info.startTime, info.duration, info.isEnabled, false, info.modRate)
+        if info.isEnabled then
+          cd:SetCooldown(info.startTime, info.duration, info.modRate)
+        else
+          cd:Clear()
+        end
         return
       end
     end
@@ -497,7 +502,11 @@ function Barshelf:UpdateCustomCooldown(button, bc, gcdInfo)
     if C_Item and C_Item.GetItemCooldown then
       local ok, st, dur, enable = pcall(C_Item.GetItemCooldown, bc.id)
       if ok and st then
-        CooldownFrame_Set(cd, st, dur, enable)
+        if enable and enable ~= 0 then
+          cd:SetCooldown(st, dur)
+        else
+          cd:Clear()
+        end
         return
       end
     end
@@ -506,18 +515,26 @@ function Barshelf:UpdateCustomCooldown(button, bc, gcdInfo)
     if ok and spellID and C_Spell and C_Spell.GetSpellCooldown then
       local ok2, info = pcall(C_Spell.GetSpellCooldown, spellID)
       if ok2 and info then
-        CooldownFrame_Set(cd, info.startTime, info.duration, info.isEnabled, false, info.modRate)
+        if info.isEnabled then
+          cd:SetCooldown(info.startTime, info.duration, info.modRate)
+        else
+          cd:Clear()
+        end
         return
       end
     end
   elseif bc.type == "macro" or bc.type == "battlepet" then
     if gcdInfo then
-      CooldownFrame_Set(cd, gcdInfo.startTime, gcdInfo.duration, gcdInfo.isEnabled, false, gcdInfo.modRate)
+      if gcdInfo.isEnabled then
+        cd:SetCooldown(gcdInfo.startTime, gcdInfo.duration, gcdInfo.modRate)
+      else
+        cd:Clear()
+      end
       return
     end
   end
 
-  CooldownFrame_Clear(cd)
+  cd:Clear()
 end
 
 ---------------------------------------------------------------------------
