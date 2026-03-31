@@ -732,26 +732,15 @@ local function CreateEditBox(parent, x, y, labelText, text, width, onChange)
   lbl:SetPoint("TOPLEFT", x, y)
   lbl:SetText(labelText)
 
-  local eb = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+  local eb = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
   eb:SetPoint("TOPLEFT", x + 2, y - 16)
   eb:SetSize(width or 180, 22)
   eb:SetAutoFocus(false)
   eb:SetFontObject("ChatFontNormal")
-  eb:SetBackdrop({
-    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    edgeSize = 10,
-    tile = true,
-    tileSize = 8,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 },
-  })
-  eb:SetBackdropColor(0, 0, 0, 0.5)
-  eb:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
-  eb:SetTextInsets(4, 4, 0, 0)
   eb:SetText(text or "")
   eb:SetScript("OnEnterPressed", function(self)
-    self:ClearFocus()
     onChange(self:GetText())
+    self:ClearFocus()
   end)
   eb:SetScript("OnEscapePressed", function(self)
     self:ClearFocus()

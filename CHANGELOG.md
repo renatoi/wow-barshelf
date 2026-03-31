@@ -1,3 +1,10 @@
+## v1.3.1
+
+### Bug Fixes
+- **Shelf rename not working**: Fixed label edit box not responding to Enter/Backspace. Switched from `BackdropTemplate` to `InputBoxTemplate` which properly handles keyboard input inside the Blizzard Settings panel.
+
+---
+
 ## v1.3.0
 
 ### New Features
