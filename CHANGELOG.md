@@ -6,7 +6,7 @@
 - **Keybindings for custom shelves**: Assign key bindings to individual custom shelf slots via the per-shelf settings panel. Bindings work even when the popup is closed (via invisible proxy buttons). Keybind text shown on each button.
 
 ### Improvements
-- **Cooldown display on custom shelves**: Proper dark "pizza" sweep overlay with countdown text, matching Blizzard's native action buttons. Uses `CooldownFrame_Set` for full 12.0.1 combat compatibility (secret values).
+- **Cooldown display on custom shelves**: Proper dark "pizza" sweep overlay with countdown text, matching Blizzard's native action buttons. Uses the 12.0.1 `DurationObject` pipeline (`C_DurationUtil.CreateDuration` → `SetTimeFromStart` → `SetCooldownFromDurationObject`) for full combat compatibility with secret values.
 - **GCD animation**: Global cooldown sweep now shows on all custom shelf buttons. Event-driven via `SPELL_UPDATE_COOLDOWN` / `ACTIONBAR_UPDATE_COOLDOWN` for instant response. Off-GCD abilities (defensives, some trinkets) correctly skip the sweep.
 - **Handle icon for mounts, macros, and battle pets**: Dock handle now picks up icons from all custom shelf action types, not just spells and items.
 
