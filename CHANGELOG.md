@@ -1,3 +1,11 @@
+## v1.4.1
+
+### Bug Fixes
+- **Empty bar shelf slots not showing during drag**: Reparented action buttons were missing Blizzard's `ShowGrid` broadcast (sent to action bar children only). Now listens for `ACTIONBAR_SHOWGRID`/`ACTIONBAR_HIDEGRID` events and forwards `ShowGrid`/`HideGrid` to reparented buttons, keeping the internal counter in sync so empty slots stay visible while dragging.
+- **Right mouse button stuck when entering combat**: The click-outside-to-close backdrop was a `Button` with `EnableMouse(true)`, consuming all mouse events including right-click even though only left-click was processed. Changed to a `Frame` with `SetPropagateMouseClicks(true)` so right-clicks always pass through to the game world.
+
+---
+
 ## v1.4.0
 
 ### New Features
@@ -6,7 +14,6 @@
 ### Bug Fixes
 - **Shelf rename not saving**: Edit boxes now save on focus-lost (blur) in addition to Enter, fixing rename inside the Blizzard Settings panel where Enter/Backspace/arrow keys were intercepted. Escape reverts to the previous value.
 - **Arrow/Backspace keys not working in edit boxes**: Keybind capture buttons were consuming keyboard events even when not in listening mode. They now propagate keys through when inactive.
-- **Empty action bar slots disappearing on mouseover**: Reparented Blizzard action buttons are now immediately re-shown via an `OnHide` hook instead of relying on a 1-second watchdog, preventing empty slots from vanishing when trying to drag spells onto them.
 - **Flyout spells silently rejected**: Dragging a flyout spell (e.g. Hunter Pet Skills, Mage Portals) onto a custom shelf now shows a helpful message instead of silently ignoring the drop.
 
 ---
