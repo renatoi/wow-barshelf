@@ -1,3 +1,10 @@
+## v1.3.3
+
+### Bug Fixes
+- **Right mouse button getting stuck**: The click-outside-to-close backdrop was registering for all mouse buttons (`AnyUp`), which could swallow `RightButtonUp` events before the game received them — causing the right mouse button to appear stuck. Now only listens for left-click.
+
+---
+
 ## v1.3.2
 
 ### Bug Fixes
