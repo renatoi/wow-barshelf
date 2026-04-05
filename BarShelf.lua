@@ -59,30 +59,21 @@ function Barshelf:ActivateBarShelf(shelf)
       RegisterStateDriver(button, "visibility", "show")
       button._barshelfManaged = true
 
-      -- Immediately re-show if Blizzard hides empty buttons (e.g. on mouseover)
-      if not button._barshelfOnHideHooked then
-        button:HookScript("OnHide", function(self)
-          if self._barshelfManaged and not InCombatLockdown() then
-            C_Timer.After(0, function()
-              if self._barshelfManaged and not InCombatLockdown() then
-                self:Show()
-              end
-            end)
-          end
-        end)
-        button._barshelfOnHideHooked = true
-      end
-
       shelf.buttons[i] = button
     end
   end
 
   self:LayoutBarPopup(shelf)
 
-  -- Force Blizzard's update on each button to clear stale icons
+  -- Force Blizzard's update on occupied buttons to clear stale icons.
+  -- Skip empty buttons — UpdateAction hides them, breaking the showgrid
+  -- state that keeps empty slots visible during drag operations.
   local function RefreshAllButtons()
     for _, button in pairs(shelf.buttons) do
       pcall(function()
+        if not HasAction(button.action or 0) then
+          return
+        end
         if button.UpdateAction then
           button:UpdateAction()
         elseif button.Update then
@@ -106,11 +97,40 @@ function Barshelf:ActivateBarShelf(shelf)
     end)
   end)
 
-  -- Watchdog: re-assert parenting if Blizzard moves buttons back.
-  -- Throttled to once per second to avoid fighting with Blizzard's
-  -- own button updates (which caused grid blinking on mouseover).
+  -- Forward grid show/hide to reparented buttons: since buttons are no
+  -- longer children of the action bar, they miss Blizzard's ShowGrid
+  -- broadcast when the player picks up a spell. Listen for the events
+  -- and manually show/hide empty buttons to match native behavior.
   local popup = shelf.popup
   local buttons = shelf.buttons
+
+  local gridHandler = CreateFrame("Frame")
+  gridHandler:RegisterEvent("ACTIONBAR_SHOWGRID")
+  gridHandler:RegisterEvent("ACTIONBAR_HIDEGRID")
+  gridHandler:SetScript("OnEvent", function(_, event)
+    for _, btn in pairs(buttons) do
+      if btn and btn._barshelfManaged and not HasAction(btn.action or 0) then
+        if event == "ACTIONBAR_SHOWGRID" then
+          if btn.ShowGrid then
+            btn:ShowGrid()
+          else
+            btn:Show()
+          end
+        else
+          if btn.HideGrid then
+            btn:HideGrid()
+          else
+            btn:Hide()
+          end
+        end
+      end
+    end
+  end)
+  shelf._gridHandler = gridHandler
+
+  -- Watchdog: re-assert parenting if Blizzard moves buttons back.
+  -- Throttled to once per second to avoid fighting with Blizzard's
+  -- own button updates.
   local watchdogElapsed = 0
   popup:SetScript("OnUpdate", function(_, dt)
     watchdogElapsed = watchdogElapsed + dt
@@ -125,9 +145,6 @@ function Barshelf:ActivateBarShelf(shelf)
       if btn and btn._barshelfManaged then
         if btn:GetParent() ~= popup then
           btn:SetParent(popup)
-        end
-        if not btn:IsShown() then
-          btn:Show()
         end
       end
     end
@@ -258,9 +275,13 @@ function Barshelf:DeactivateBarShelf(shelf)
     shelf.barFrameWasShown = nil
   end
 
-  -- Remove watchdog and reset popup scale
+  -- Remove watchdog, grid handler, and reset popup scale
   shelf.popup:SetScript("OnUpdate", nil)
   shelf.popup:SetScale(1)
+  if shelf._gridHandler then
+    shelf._gridHandler:UnregisterAllEvents()
+    shelf._gridHandler = nil
+  end
 
   for i = 1, #shelf.buttons do
     local button = shelf.buttons[i]

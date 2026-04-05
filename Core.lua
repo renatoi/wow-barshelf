@@ -211,17 +211,20 @@ end
 -- Backdrop (click-outside-to-close, out of combat only)
 ---------------------------------------------------------------------------
 function Barshelf:CreateBackdrop()
-  local f = CreateFrame("Button", "BarshelfBackdrop", UIParent)
+  local f = CreateFrame("Frame", "BarshelfBackdrop", UIParent)
   f:SetAllPoints(UIParent)
   f:SetFrameStrata("DIALOG")
   f:SetFrameLevel(0)
   f:EnableMouse(true)
-  f:RegisterForClicks("LeftButtonUp")
+  f:SetPropagateMouseClicks(true)
   f:Hide()
   f:SetScript("OnShow", function(self)
     self.showTime = GetTime()
   end)
-  f:SetScript("OnClick", function(self)
+  f:SetScript("OnMouseDown", function(self, button)
+    if button ~= "LeftButton" then
+      return
+    end
     if GetTime() - (self.showTime or 0) < 0.15 then
       return
     end
