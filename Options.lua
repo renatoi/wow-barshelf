@@ -738,11 +738,21 @@ local function CreateEditBox(parent, x, y, labelText, text, width, onChange)
   eb:SetAutoFocus(false)
   eb:SetFontObject("ChatFontNormal")
   eb:SetText(text or "")
+  eb._lastCommitted = text or ""
+  local function commitEdit(self)
+    local newText = self:GetText()
+    if newText ~= self._lastCommitted then
+      self._lastCommitted = newText
+      onChange(newText)
+    end
+  end
   eb:SetScript("OnEnterPressed", function(self)
-    onChange(self:GetText())
+    commitEdit(self)
     self:ClearFocus()
   end)
+  eb:SetScript("OnEditFocusLost", commitEdit)
   eb:SetScript("OnEscapePressed", function(self)
+    self:SetText(self._lastCommitted)
     self:ClearFocus()
   end)
 

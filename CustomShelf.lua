@@ -307,6 +307,9 @@ function Barshelf:HandleCustomDrop(shelf, slotIndex, button)
   elseif cursorType == "petaction" then
     print("|cff00ccffBarshelf:|r " .. L["Pet actions are not supported."])
     return
+  elseif cursorType == "flyout" then
+    print("|cff00ccffBarshelf:|r " .. L["Flyout spells are not supported. Drag individual spells from the flyout instead."])
+    return
   end
 
   if bc then
