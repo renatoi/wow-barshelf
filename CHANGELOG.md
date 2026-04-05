@@ -1,3 +1,16 @@
+## v1.4.0
+
+### New Features
+- **List layout mode for custom shelves**: New per-shelf "Layout" dropdown (Grid / List). List mode shows buttons in a vertical single-column layout with icon, spell/item name, and hotkey per row. Popup width auto-adjusts to label lengths (150–300px). The `# of Rows` slider is hidden in list mode.
+
+### Bug Fixes
+- **Shelf rename not saving**: Edit boxes now save on focus-lost (blur) in addition to Enter, fixing rename inside the Blizzard Settings panel where Enter/Backspace/arrow keys were intercepted. Escape reverts to the previous value.
+- **Arrow/Backspace keys not working in edit boxes**: Keybind capture buttons were consuming keyboard events even when not in listening mode. They now propagate keys through when inactive.
+- **Empty action bar slots disappearing on mouseover**: Reparented Blizzard action buttons are now immediately re-shown via an `OnHide` hook instead of relying on a 1-second watchdog, preventing empty slots from vanishing when trying to drag spells onto them.
+- **Flyout spells silently rejected**: Dragging a flyout spell (e.g. Hunter Pet Skills, Mage Portals) onto a custom shelf now shows a helpful message instead of silently ignoring the drop.
+
+---
+
 ## v1.3.3
 
 ### Bug Fixes

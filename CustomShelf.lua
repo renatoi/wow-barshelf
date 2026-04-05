@@ -150,6 +150,13 @@ function Barshelf:CreateCustomButtons(shelf)
     hotkey:SetJustifyH("LEFT")
     button.hotkey = hotkey
 
+    local nameLabel = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    nameLabel:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+    nameLabel:SetJustifyH("LEFT")
+    nameLabel:SetWordWrap(false)
+    nameLabel:Hide()
+    button.nameLabel = nameLabel
+
     -- Apply saved action if any
     local bc = config.buttons and config.buttons[i]
     if bc then
@@ -227,20 +234,23 @@ function Barshelf:ApplyCustomAction(button, bc)
   button:SetAttribute("macro", nil)
   button:SetAttribute("macrotext", nil)
 
-  local texture
+  local texture, labelText
   if bc.type == "spell" and bc.id then
     button:SetAttribute("type", "spell")
     button:SetAttribute("spell", bc.id)
     texture = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(bc.id)
+    labelText = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(bc.id)
   elseif bc.type == "item" and bc.id then
     button:SetAttribute("type", "item")
     button:SetAttribute("item", "item:" .. bc.id)
     texture = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(bc.id)
+    labelText = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(bc.id)
   elseif bc.type == "macro" and bc.id then
     button:SetAttribute("type", "macro")
     button:SetAttribute("macro", bc.id)
-    local _, iconTex = GetMacroInfo(bc.id)
+    local name, iconTex = GetMacroInfo(bc.id)
     texture = iconTex
+    labelText = name
   elseif bc.type == "mount" and bc.id then
     local name, spellID, icon = C_MountJournal.GetMountInfoByID(bc.id)
     if name then
@@ -248,6 +258,7 @@ function Barshelf:ApplyCustomAction(button, bc)
       button:SetAttribute("macrotext", "/cast " .. name)
     end
     texture = icon
+    labelText = name
   elseif bc.type == "battlepet" and bc.id then
     local _, customName, _, _, _, _, _, petName, petIcon = C_PetJournal.GetPetInfoByPetID(bc.id)
     if petName then
@@ -255,11 +266,16 @@ function Barshelf:ApplyCustomAction(button, bc)
       button:SetAttribute("macrotext", "/summonpet " .. (customName or petName))
     end
     texture = petIcon
+    labelText = customName or petName
   end
 
   if button.icon then
     button.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
     button.icon:Show()
+  end
+  if button.nameLabel then
+    button.nameLabel:SetText(labelText or "")
+    button.nameLabel:SetTextColor(1, 1, 1)
   end
 end
 
@@ -273,12 +289,19 @@ function Barshelf:SetEmptySlotAppearance(button)
     button.icon:SetDesaturated(true)
     button.icon:SetAlpha(0.35)
   end
+  if button.nameLabel then
+    button.nameLabel:SetText(L["Empty"])
+    button.nameLabel:SetTextColor(0.5, 0.5, 0.5)
+  end
 end
 
 function Barshelf:RestoreSlotAppearance(button)
   if button.icon then
     button.icon:SetDesaturated(false)
     button.icon:SetAlpha(1)
+  end
+  if button.nameLabel then
+    button.nameLabel:SetTextColor(1, 1, 1)
   end
 end
 
@@ -308,7 +331,9 @@ function Barshelf:HandleCustomDrop(shelf, slotIndex, button)
     print("|cff00ccffBarshelf:|r " .. L["Pet actions are not supported."])
     return
   elseif cursorType == "flyout" then
-    print("|cff00ccffBarshelf:|r " .. L["Flyout spells are not supported. Drag individual spells from the flyout instead."])
+    print(
+      "|cff00ccffBarshelf:|r " .. L["Flyout spells are not supported. Drag individual spells from the flyout instead."]
+    )
     return
   end
 

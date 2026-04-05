@@ -201,9 +201,16 @@ function Barshelf:UpdatePopupAnchor(popup)
 
     -- Estimate popup height
     local num = config.numButtons or 12
-    local rows = config.numRows or 1
     local bsz = config.buttonSize or 36
     local bpad = config.buttonPadding or 2
+    local rows
+    if config.layout == "list" then
+      rows = num
+    else
+      local nRows = config.numRows or 1
+      local cols = math.ceil(num / math.max(nRows, 1))
+      rows = math.ceil(math.max(num, 1) / cols)
+    end
     local ph = rows * (bsz + bpad) - bpad + POPUP_INSET * 2
 
     anchor = (hy - ph < 0) and "TOP" or "BOTTOM"
@@ -521,32 +528,124 @@ function Barshelf:LayoutPopupButtons(popup, buttons, config)
   end
 
   local num = config.numButtons or #buttons
-  local nRows = config.numRows or 1
-  local cols = math.ceil(num / math.max(nRows, 1))
   local bsz = config.buttonSize or 36
   local bpad = config.buttonPadding or 2
   local stride = bsz + bpad
-  local rows = math.ceil(math.max(num, 1) / cols)
-
-  popup:SetSize(cols * stride - bpad + POPUP_INSET * 2, rows * stride - bpad + POPUP_INSET * 2)
-
   local total = math.max(num, #buttons)
-  for i = 1, total do
-    local button = buttons[i]
-    if not button then -- skip nil holes
-    elseif i <= num then
-      local row = math.floor((i - 1) / cols)
-      local col = (i - 1) % cols
-      local x = POPUP_INSET + col * stride
-      local y = -POPUP_INSET - row * stride
 
-      button:SetParent(popup)
-      button:ClearAllPoints()
-      button:SetPoint("TOPLEFT", popup, "TOPLEFT", x, y)
-      button:SetSize(bsz, bsz)
-      button:Show()
-    else
-      button:Hide()
+  if config.layout == "list" then
+    -- List mode: single column with icon + label per row
+    local LABEL_PAD = 6
+    local HOTKEY_WIDTH = 30
+    local RIGHT_PAD = 4
+    local MIN_ROW_WIDTH = 150
+    local MAX_ROW_WIDTH = 300
+
+    -- Measure label widths
+    local maxLabelWidth = 0
+    for i = 1, num do
+      local button = buttons[i]
+      if button and button.nameLabel then
+        button.nameLabel:SetWidth(0)
+        local w = button.nameLabel:GetStringWidth() or 0
+        if w > maxLabelWidth then
+          maxLabelWidth = w
+        end
+      end
+    end
+
+    local contentWidth = bsz + LABEL_PAD + maxLabelWidth + HOTKEY_WIDTH + RIGHT_PAD
+    local rowWidth = math.max(MIN_ROW_WIDTH, math.min(MAX_ROW_WIDTH, contentWidth))
+    local labelWidth = rowWidth - bsz - LABEL_PAD - HOTKEY_WIDTH - RIGHT_PAD
+
+    popup:SetSize(rowWidth + POPUP_INSET * 2, num * stride - bpad + POPUP_INSET * 2)
+
+    for i = 1, total do
+      local button = buttons[i]
+      if not button then
+        -- skip nil holes
+      elseif i <= num then
+        button:SetParent(popup)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", popup, "TOPLEFT", POPUP_INSET, -POPUP_INSET - (i - 1) * stride)
+        button:SetSize(rowWidth, bsz)
+        button:Show()
+
+        if button.icon then
+          button.icon:ClearAllPoints()
+          button.icon:SetPoint("LEFT", button, "LEFT", 0, 0)
+          button.icon:SetSize(bsz, bsz)
+        end
+        if button.nameLabel then
+          button.nameLabel:ClearAllPoints()
+          button.nameLabel:SetPoint("LEFT", button.icon, "RIGHT", LABEL_PAD, 0)
+          button.nameLabel:SetWidth(labelWidth)
+          button.nameLabel:Show()
+        end
+        if button.hotkey then
+          button.hotkey:ClearAllPoints()
+          button.hotkey:SetPoint("RIGHT", button, "RIGHT", -RIGHT_PAD, 0)
+          button.hotkey:SetJustifyH("RIGHT")
+        end
+        if button.cooldown then
+          button.cooldown:ClearAllPoints()
+          button.cooldown:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+          button.cooldown:SetSize(bsz, bsz)
+        end
+      else
+        button:Hide()
+        if button.nameLabel then
+          button.nameLabel:Hide()
+        end
+      end
+    end
+  else
+    -- Grid mode (default)
+    local nRows = config.numRows or 1
+    local cols = math.ceil(num / math.max(nRows, 1))
+    local rows = math.ceil(math.max(num, 1) / cols)
+
+    popup:SetSize(cols * stride - bpad + POPUP_INSET * 2, rows * stride - bpad + POPUP_INSET * 2)
+
+    for i = 1, total do
+      local button = buttons[i]
+      if not button then
+        -- skip nil holes
+      elseif i <= num then
+        local row = math.floor((i - 1) / cols)
+        local col = (i - 1) % cols
+        local x = POPUP_INSET + col * stride
+        local y = -POPUP_INSET - row * stride
+
+        button:SetParent(popup)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", popup, "TOPLEFT", x, y)
+        button:SetSize(bsz, bsz)
+        button:Show()
+
+        -- Reset sub-elements to grid layout
+        if button.icon then
+          button.icon:ClearAllPoints()
+          button.icon:SetAllPoints()
+        end
+        if button.nameLabel then
+          button.nameLabel:Hide()
+        end
+        if button.hotkey then
+          button.hotkey:ClearAllPoints()
+          button.hotkey:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
+          button.hotkey:SetJustifyH("LEFT")
+        end
+        if button.cooldown then
+          button.cooldown:ClearAllPoints()
+          button.cooldown:SetAllPoints()
+        end
+      else
+        button:Hide()
+        if button.nameLabel then
+          button.nameLabel:Hide()
+        end
+      end
     end
   end
 end

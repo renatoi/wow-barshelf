@@ -59,6 +59,20 @@ function Barshelf:ActivateBarShelf(shelf)
       RegisterStateDriver(button, "visibility", "show")
       button._barshelfManaged = true
 
+      -- Immediately re-show if Blizzard hides empty buttons (e.g. on mouseover)
+      if not button._barshelfOnHideHooked then
+        button:HookScript("OnHide", function(self)
+          if self._barshelfManaged and not InCombatLockdown() then
+            C_Timer.After(0, function()
+              if self._barshelfManaged and not InCombatLockdown() then
+                self:Show()
+              end
+            end)
+          end
+        end)
+        button._barshelfOnHideHooked = true
+      end
+
       shelf.buttons[i] = button
     end
   end

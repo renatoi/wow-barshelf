@@ -746,11 +746,17 @@ local function CreateEditBox(parent, x, y, labelText, text, width, onChange)
       onChange(newText)
     end
   end
+  eb:SetScript("OnEditFocusGained", function(self)
+    self:SetPropagateKeyboardInput(false)
+  end)
+  eb:SetScript("OnEditFocusLost", function(self)
+    self:SetPropagateKeyboardInput(true)
+    commitEdit(self)
+  end)
   eb:SetScript("OnEnterPressed", function(self)
     commitEdit(self)
     self:ClearFocus()
   end)
-  eb:SetScript("OnEditFocusLost", commitEdit)
   eb:SetScript("OnEscapePressed", function(self)
     self:SetText(self._lastCommitted)
     self:ClearFocus()
@@ -823,8 +829,10 @@ local function CreateKeybindButton(parent, x, y, slotIndex, currentKey, onChange
 
   btn:SetScript("OnKeyDown", function(self, key)
     if not self.listening then
+      self:SetPropagateKeyboardInput(true)
       return
     end
+    self:SetPropagateKeyboardInput(false)
     -- Ignore bare modifier keys
     if MODIFIER_KEYS[key] then
       return
@@ -2231,6 +2239,27 @@ local function BuildShelvesAndDocksPanel(panel)
       layoutHdr:SetText("|cffffffff" .. L["Layout & Sizing"] .. "|r")
       y = y - 18
 
+      -- Layout mode dropdown (custom shelves only)
+      if cfg.type == "custom" then
+        local layoutNames = { grid = L["Grid"], list = L["List"] }
+        _, y = CreateDropdownButton(
+          detailChild,
+          indent,
+          y,
+          L["Layout"],
+          {
+            { text = L["Grid"], value = "grid" },
+            { text = L["List"], value = "list" },
+          },
+          layoutNames[cfg.layout] or L["Grid"],
+          function(v)
+            cfg.layout = (v == "grid") and nil or v
+            DebouncedRebuild()
+            RefreshDetail()
+          end
+        )
+      end
+
       -- Micro/bags shelves auto-detect button count; don't show # of Icons or Icon Size
       if not isMicro and not isBags then
         _, y = CreateSlider(
@@ -2249,20 +2278,23 @@ local function BuildShelvesAndDocksPanel(panel)
         )
       end
 
-      _, y = CreateSlider(
-        detailChild,
-        indent,
-        y,
-        L["# of Rows"],
-        1,
-        (isMicro or isBags) and 4 or (isBar and 12 or 24),
-        1,
-        cfg.numRows or 1,
-        function(v)
-          cfg.numRows = v
-          DebouncedRebuild()
-        end
-      )
+      -- Hide rows slider in list mode (single column)
+      if cfg.layout ~= "list" then
+        _, y = CreateSlider(
+          detailChild,
+          indent,
+          y,
+          L["# of Rows"],
+          1,
+          (isMicro or isBags) and 4 or (isBar and 12 or 24),
+          1,
+          cfg.numRows or 1,
+          function(v)
+            cfg.numRows = v
+            DebouncedRebuild()
+          end
+        )
+      end
 
       if not isMicro and not isBags then
         _, y = CreateSlider(
