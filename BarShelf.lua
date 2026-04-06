@@ -108,23 +108,31 @@ function Barshelf:ActivateBarShelf(shelf)
   gridHandler:RegisterEvent("ACTIONBAR_SHOWGRID")
   gridHandler:RegisterEvent("ACTIONBAR_HIDEGRID")
   gridHandler:SetScript("OnEvent", function(_, event)
-    for _, btn in pairs(buttons) do
-      if btn and btn._barshelfManaged and not HasAction(btn.action or 0) then
-        if event == "ACTIONBAR_SHOWGRID" then
-          if btn.ShowGrid then
-            btn:ShowGrid()
+    -- Defer to next frame: the event fires inside a secure call chain
+    -- (e.g. PickupSpellBookItem), so calling Show/ShowGrid on secure
+    -- frames would cause ADDON_ACTION_BLOCKED.
+    C_Timer.After(0, function()
+      if InCombatLockdown() then
+        return
+      end
+      for _, btn in pairs(buttons) do
+        if btn and btn._barshelfManaged and not HasAction(btn.action or 0) then
+          if event == "ACTIONBAR_SHOWGRID" then
+            if btn.ShowGrid then
+              btn:ShowGrid()
+            else
+              btn:Show()
+            end
           else
-            btn:Show()
-          end
-        else
-          if btn.HideGrid then
-            btn:HideGrid()
-          else
-            btn:Hide()
+            if btn.HideGrid then
+              btn:HideGrid()
+            else
+              btn:Hide()
+            end
           end
         end
       end
-    end
+    end)
   end)
   shelf._gridHandler = gridHandler
 
